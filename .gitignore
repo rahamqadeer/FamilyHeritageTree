@@ -1,2 +1,27 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
 config.bat
-node_modules
+
+# Backend
+backend/node_modules/
+
+# Flutter/Dart
+mobile/.dart_tool/
+mobile/.packages
+mobile/build/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/*.iml
+mobile/.idea/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+*.swp

@@ -6,7 +6,7 @@ const { Client } = pg
 const schemaSql = `
 CREATE TABLE IF NOT EXISTS users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  firebase_uid text UNIQUE NOT NULL,
+  supabase_uid uuid UNIQUE NOT NULL,
   email text UNIQUE NOT NULL,
   display_name text,
   created_at timestamptz DEFAULT now()

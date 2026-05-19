@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -14,7 +14,8 @@ class _MemoryUploadScreenState extends State<MemoryUploadScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  File? _selectedFile;
+  XFile? _selectedFile;
+  Uint8List? _imageBytes;
   bool _uploading = false;
 
   @override
@@ -58,10 +59,10 @@ class _MemoryUploadScreenState extends State<MemoryUploadScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              if (_selectedFile != null)
+              if (_imageBytes != null)
                 SizedBox(
                   height: 160,
-                  child: Image.file(_selectedFile!, fit: BoxFit.cover),
+                  child: Image.memory(_imageBytes!, fit: BoxFit.cover),
                 ),
               const SizedBox(height: 8),
               Row(
@@ -73,8 +74,10 @@ class _MemoryUploadScreenState extends State<MemoryUploadScreen> {
                         final file =
                             await picker.pickImage(source: ImageSource.gallery);
                         if (file != null) {
+                          final bytes = await file.readAsBytes();
                           setState(() {
-                            _selectedFile = File(file.path);
+                            _selectedFile = file;
+                            _imageBytes = bytes;
                           });
                         }
                       },
@@ -95,7 +98,7 @@ class _MemoryUploadScreenState extends State<MemoryUploadScreen> {
                           setState(() {
                             _uploading = true;
                           });
-                          // TODO: integrate Firebase Storage upload + backend metadata API
+                          // TODO: integrate Supabase Storage upload + backend metadata API
                           await Future.delayed(const Duration(seconds: 1));
                           if (mounted) {
                             setState(() {

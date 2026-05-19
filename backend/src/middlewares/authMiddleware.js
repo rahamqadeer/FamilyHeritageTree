@@ -1,11 +1,10 @@
 import jwt from 'jsonwebtoken'
-import { firebaseAdmin } from '../config/firebaseAdmin.js'
 import { appConfig } from '../config/env.js'
 import { supabaseAdmin } from '../config/supabaseClient.js'
 
 // This middleware expects either:
-// - A Firebase ID token in Authorization: Bearer <token>
-// - Or an internal JWT issued by this API that wraps a Firebase user
+// - A Supabase access token in Authorization: Bearer <token>
+// - Or an internal JWT issued by this API
 
 export async function authMiddleware (req, res, next) {
   try {
@@ -16,27 +15,31 @@ export async function authMiddleware (req, res, next) {
       return res.status(401).json({ message: 'Missing Authorization token' })
     }
 
-    let firebaseUser
+    let supabaseUser
     let internalPayload
 
     try {
-      // Try verify as Firebase ID token
-      firebaseUser = await firebaseAdmin.auth().verifyIdToken(token)
+      // Try verify as Supabase access token
+      const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
+      if (error || !user) {
+        throw new Error('Invalid Supabase token')
+      }
+      supabaseUser = user
     } catch (err) {
       // Fallback: verify as internal JWT
       try {
         internalPayload = jwt.verify(token, appConfig.jwtSecret)
-        firebaseUser = internalPayload.firebaseUser
+        supabaseUser = internalPayload.supabaseUser
       } catch {
         return res.status(401).json({ message: 'Invalid or expired token' })
       }
     }
 
-    // Ensure local user record exists in Supabase
+    // Ensure local user record exists in Supabase users table
     const { data: existingUser, error } = await supabaseAdmin
       .from('users')
       .select('*')
-      .eq('firebase_uid', firebaseUser.uid)
+      .eq('supabase_uid', supabaseUser.id)
       .single()
 
     if (error && error.code !== 'PGRST116') {
@@ -50,9 +53,9 @@ export async function authMiddleware (req, res, next) {
       const { data: inserted, error: insertError } = await supabaseAdmin
         .from('users')
         .insert({
-          firebase_uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          display_name: firebaseUser.name || firebaseUser.email
+          supabase_uid: supabaseUser.id,
+          email: supabaseUser.email,
+          display_name: supabaseUser.user_metadata?.display_name || supabaseUser.email
         })
         .select('*')
         .single()
@@ -66,7 +69,7 @@ export async function authMiddleware (req, res, next) {
     }
 
     req.auth = {
-      firebaseUser,
+      supabaseUser,
       user
     }
 
@@ -77,14 +80,14 @@ export async function authMiddleware (req, res, next) {
   }
 }
 
-// Issues a short-lived internal JWT after Firebase login if the client prefers
-export function issueInternalJwt (firebaseUser, user) {
+// Issues a short-lived internal JWT after Supabase login if the client prefers
+export function issueInternalJwt (supabaseUser, user) {
   const payload = {
     sub: user.id,
-    firebaseUid: firebaseUser.uid,
-    firebaseUser: {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email
+    supabaseUid: supabaseUser.id,
+    supabaseUser: {
+      id: supabaseUser.id,
+      email: supabaseUser.email
     }
   }
 

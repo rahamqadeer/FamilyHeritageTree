@@ -1,37 +1,41 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthProvider extends ChangeNotifier {
-  final _firebaseAuth = FirebaseAuth.instance;
+  final _supabase = Supabase.instance.client;
   final _secureStorage = const FlutterSecureStorage();
   final _localAuth = LocalAuthentication();
 
   bool _isAuthenticated = false;
   bool get isAuthenticated => _isAuthenticated;
 
-  User? get user => _firebaseAuth.currentUser;
+  User? get user => _supabase.auth.currentUser;
 
   AuthProvider() {
     _bootstrap();
+    _supabase.auth.onAuthStateChange.listen((data) {
+      _isAuthenticated = data.session != null;
+      notifyListeners();
+    });
   }
 
   Future<void> _bootstrap() async {
-    final currentUser = _firebaseAuth.currentUser;
-    _isAuthenticated = currentUser != null;
+    final session = _supabase.auth.currentSession;
+    _isAuthenticated = session != null;
     notifyListeners();
   }
 
   Future<void> signInWithEmail(String email, String password) async {
-    final cred = await _firebaseAuth.signInWithEmailAndPassword(
+    final response = await _supabase.auth.signInWithPassword(
       email: email,
       password: password,
     );
 
-    final token = await cred.user?.getIdToken();
+    final token = response.session?.accessToken;
     if (token != null) {
-      await _secureStorage.write(key: 'id_token', value: token);
+      await _secureStorage.write(key: 'access_token', value: token);
     }
 
     _isAuthenticated = true;
@@ -39,17 +43,17 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> registerWithEmail(String email, String password) async {
-    final cred = await _firebaseAuth.createUserWithEmailAndPassword(
+    final response = await _supabase.auth.signUp(
       email: email,
       password: password,
     );
 
-    final token = await cred.user?.getIdToken();
+    final token = response.session?.accessToken;
     if (token != null) {
-      await _secureStorage.write(key: 'id_token', value: token);
+      await _secureStorage.write(key: 'access_token', value: token);
     }
 
-    _isAuthenticated = true;
+    _isAuthenticated = response.session != null;
     notifyListeners();
   }
 
@@ -65,7 +69,7 @@ class AuthProvider extends ChangeNotifier {
       ),
     );
 
-    if (didAuth && _firebaseAuth.currentUser != null) {
+    if (didAuth && _supabase.auth.currentUser != null) {
       _isAuthenticated = true;
       notifyListeners();
       return true;
@@ -75,9 +79,12 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
-    await _firebaseAuth.signOut();
-    await _secureStorage.delete(key: 'id_token');
+    await _supabase.auth.signOut();
+    await _secureStorage.delete(key: 'access_token');
     _isAuthenticated = false;
     notifyListeners();
   }
+
+  /// Get the current access token for API calls
+  String? get accessToken => _supabase.auth.currentSession?.accessToken;
 }
