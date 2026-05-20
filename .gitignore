@@ -1,27 +1,23 @@
-# Dependencies
-node_modules/
-
-# Environment files
 .env
-.env.local
-.env.*.local
-config.bat
+.env.txt
+backend/.env
+mobile/.env
+firebase-service-account.json
+**/firebase-service-account.json
 
-# Backend
+# Node
+node_modules/
 backend/node_modules/
 
-# Flutter/Dart
+# Flutter / Dart
 mobile/.dart_tool/
-mobile/.packages
-mobile/build/
 mobile/.flutter-plugins
 mobile/.flutter-plugins-dependencies
-mobile/*.iml
-mobile/.idea/
+mobile/build/
+mobile/.packages
 
-# macOS
+# OS / IDE
 .DS_Store
-
-# IDE
+Thumbs.db
+.idea/
 .vscode/
-*.swp
