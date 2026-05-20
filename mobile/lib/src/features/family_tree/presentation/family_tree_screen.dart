@@ -1,22 +1,971 @@
+import 'package:family_digital_heritage_vault/src/core/models/family_tree_node.dart';
+import 'package:family_digital_heritage_vault/src/core/theme/app_theme.dart';
+import 'package:family_digital_heritage_vault/src/features/family/state/family_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
-class FamilyTreeScreen extends StatelessWidget {
+class FamilyTreeScreen extends StatefulWidget {
   const FamilyTreeScreen({super.key});
 
   @override
+  State<FamilyTreeScreen> createState() => _FamilyTreeScreenState();
+}
+
+class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _selectedGeneration = 'All';
+  final List<String> _generations = ['All', '1st Gen', '2nd Gen', '3rd Gen'];
+  final Set<String> _favoriteIds = {};
+
+  List<FamilyTreeNode> _getFilteredMembers(FamilyProvider provider) {
+    var nodes = provider.familyTree?.nodes ?? [];
+
+    // Filter by search
+    final query = _searchController.text.toLowerCase();
+    if (query.isNotEmpty) {
+      nodes = nodes.where((n) {
+        return n.fullName.toLowerCase().contains(query);
+      }).toList();
+    }
+
+    // Filter by generation (using metadata or relationships to determine generation)
+    if (_selectedGeneration != 'All') {
+      final genLevel = _selectedGeneration == '1st Gen'
+          ? 1
+          : _selectedGeneration == '2nd Gen'
+              ? 2
+              : 3;
+      nodes = nodes.where((n) {
+        final nodeGen = n.metadata?['generation'] as int? ?? 1;
+        return nodeGen == genLevel;
+      }).toList();
+    }
+
+    return nodes;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // For brevity this is a placeholder for an interactive tree.
-    // In a production app you would render a zoomable canvas with nodes and edges.
+    final familyProvider = context.watch<FamilyProvider>();
+    final filteredMembers = _getFilteredMembers(familyProvider);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Family Tree'),
+      body: CustomScrollView(
+        slivers: [
+          // Header with gradient
+          SliverToBoxAdapter(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: AppColors.headerGradient,
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Family Tree',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.people, color: Colors.white, size: 16),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${familyProvider.familyTree?.nodes.length ?? 0}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Your Family Heritage',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // Search bar
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search family member...',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() {});
+                                    },
+                                  )
+                                : null,
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 15,
+                            ),
+                            hintStyle: TextStyle(
+                              color: AppColors.textSecondary.withOpacity(0.7),
+                            ),
+                          ),
+                          onChanged: (value) {
+                            setState(() {});
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Generation filter chips
+          SliverToBoxAdapter(
+            child: Container(
+              color: AppColors.background,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _generations.map((gen) {
+                    final isSelected = _selectedGeneration == gen;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(gen),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() {
+                            _selectedGeneration = gen;
+                          });
+                        },
+                        backgroundColor: Colors.white,
+                        selectedColor: AppColors.primary,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : AppColors.textPrimary,
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color:
+                                isSelected ? AppColors.primary : AppColors.divider,
+                          ),
+                        ),
+                        showCheckmark: false,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+          // Content
+          if (familyProvider.loading)
+            const SliverFillRemaining(
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (filteredMembers.isEmpty)
+            SliverFillRemaining(
+              child: _buildEmptyState(),
+            )
+          else
+            // Member grid
+            SliverPadding(
+              padding: const EdgeInsets.all(16),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.9,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final node = filteredMembers[index];
+                    final genLevel = node.metadata?['generation'] as int? ?? 1;
+                    final genLabel = genLevel == 0
+                        ? 'Root'
+                        : genLevel == 1
+                            ? '1st Gen'
+                            : genLevel == 2
+                                ? '2nd Gen'
+                                : '3rd Gen';
+                    return _MemberCard(
+                      name: node.fullName,
+                      generation: genLabel,
+                      initial: node.initials,
+                      isFavorite: _favoriteIds.contains(node.id),
+                      birthDate: node.birthDate,
+                      onTap: () {
+                        _showMemberDetail(context, node);
+                      },
+                      onFavoriteToggle: () {
+                        setState(() {
+                          if (_favoriteIds.contains(node.id)) {
+                            _favoriteIds.remove(node.id);
+                          } else {
+                            _favoriteIds.add(node.id);
+                          }
+                        });
+                      },
+                    );
+                  },
+                  childCount: filteredMembers.length,
+                ),
+              ),
+            ),
+          const SliverToBoxAdapter(
+            child: SizedBox(height: 100),
+          ),
+        ],
       ),
-      body: const Center(
-        child: Text(
-          'Interactive family tree would be rendered here.\n'
-          'Tap nodes to view profiles and manage relationships.',
-          textAlign: TextAlign.center,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          _showAddMemberDialog(context);
+        },
+        backgroundColor: AppColors.primary,
+        child: const Icon(Icons.person_add),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    final isSearching = _searchController.text.isNotEmpty || _selectedGeneration != 'All';
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isSearching ? Icons.search_off : Icons.family_restroom,
+              size: 64,
+              color: AppColors.textSecondary.withOpacity(0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isSearching ? 'No members found' : 'No family members yet',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isSearching
+                  ? 'Try adjusting your search or filters'
+                  : 'Start building your family tree',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (!isSearching) ...[
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => _showAddMemberDialog(context),
+                icon: const Icon(Icons.person_add),
+                label: const Text('Add Family Member'),
+              ),
+            ] else ...[
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() => _selectedGeneration = 'All');
+                },
+                child: const Text('Clear filters'),
+              ),
+            ],
+          ],
         ),
+      ),
+    );
+  }
+
+  void _showMemberDetail(BuildContext context, FamilyTreeNode node) {
+    final genLevel = node.metadata?['generation'] as int? ?? 1;
+    final genLabel = genLevel == 0
+        ? 'Root'
+        : genLevel == 1
+            ? '1st Gen'
+            : genLevel == 2
+                ? '2nd Gen'
+                : '3rd Gen';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(context).size.height * 0.65,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.divider,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    // Avatar
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: const BoxDecoration(
+                        gradient: AppColors.primaryGradient,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          node.initials,
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      node.fullName,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        genLabel,
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Birth/Death info
+                    if (node.birthDate != null || node.deathDate != null)
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (node.birthDate != null) ...[
+                              const Icon(Icons.cake, size: 16, color: AppColors.textSecondary),
+                              const SizedBox(width: 4),
+                              Text(
+                                DateFormat.yMMMd().format(node.birthDate!),
+                                style: const TextStyle(color: AppColors.textSecondary),
+                              ),
+                            ],
+                            if (node.birthDate != null && node.deathDate != null)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8),
+                                child: Text(' - ', style: TextStyle(color: AppColors.textSecondary)),
+                              ),
+                            if (node.deathDate != null) ...[
+                              const Icon(Icons.spa, size: 16, color: AppColors.textSecondary),
+                              const SizedBox(width: 4),
+                              Text(
+                                DateFormat.yMMMd().format(node.deathDate!),
+                                style: const TextStyle(color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 16),
+                    // Actions
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _ActionButton(
+                          icon: Icons.photo_library,
+                          label: 'Memories',
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            // TODO: Navigate to member's memories with filter
+                          },
+                        ),
+                        _ActionButton(
+                          icon: Icons.edit,
+                          label: 'Edit',
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _showEditMemberDialog(context, node);
+                          },
+                        ),
+                        _ActionButton(
+                          icon: Icons.delete_outline,
+                          label: 'Delete',
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _confirmDelete(context, node);
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, FamilyTreeNode node) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Family Member'),
+        content: Text('Are you sure you want to remove ${node.fullName} from the family tree?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final familyProvider = context.read<FamilyProvider>();
+              final success = await familyProvider.deleteFamilyMember(node.id);
+              if (mounted && !success && familyProvider.error != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(familyProvider.error!)),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditMemberDialog(BuildContext context, FamilyTreeNode node) {
+    final nameController = TextEditingController(text: node.fullName);
+    DateTime? birthDate = node.birthDate;
+    DateTime? deathDate = node.deathDate;
+    int generation = node.metadata?['generation'] as int? ?? 1;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Container(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.divider,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Edit Family Member',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Birth date
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.cake_outlined),
+                  title: Text(
+                    birthDate != null
+                        ? 'Born: ${DateFormat.yMMMd().format(birthDate!)}'
+                        : 'Set Birth Date',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: ctx,
+                      initialDate: birthDate ?? DateTime(1980),
+                      firstDate: DateTime(1800),
+                      lastDate: DateTime.now(),
+                    );
+                    if (date != null) {
+                      setSheetState(() => birthDate = date);
+                    }
+                  },
+                ),
+                // Generation selector
+                DropdownButtonFormField<int>(
+                  value: generation,
+                  decoration: const InputDecoration(
+                    labelText: 'Generation',
+                    prefixIcon: Icon(Icons.layers_outlined),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 0, child: Text('Root')),
+                    DropdownMenuItem(value: 1, child: Text('1st Generation')),
+                    DropdownMenuItem(value: 2, child: Text('2nd Generation')),
+                    DropdownMenuItem(value: 3, child: Text('3rd Generation')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setSheetState(() => generation = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      if (nameController.text.isEmpty) return;
+                      Navigator.pop(ctx);
+                      final familyProvider = context.read<FamilyProvider>();
+                      final success = await familyProvider.updateFamilyMember(
+                        nodeId: node.id,
+                        fullName: nameController.text.trim(),
+                        birthDate: birthDate,
+                        deathDate: deathDate,
+                        metadata: {'generation': generation},
+                      );
+                      if (mounted) {
+                        if (success) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Member updated successfully')),
+                          );
+                        } else if (familyProvider.error != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(familyProvider.error!)),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Save Changes'),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAddMemberDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    DateTime? birthDate;
+    int generation = 1;
+    bool saving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Container(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle bar
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.divider,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Add Family Member',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(height: 16),
+                // Birth date
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.cake_outlined),
+                  title: Text(
+                    birthDate != null
+                        ? 'Birth Date: ${DateFormat.yMMMd().format(birthDate!)}'
+                        : 'Set Birth Date (optional)',
+                    style: TextStyle(
+                      color: birthDate != null ? AppColors.textPrimary : AppColors.textSecondary,
+                    ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: ctx,
+                      initialDate: birthDate ?? DateTime(1980),
+                      firstDate: DateTime(1800),
+                      lastDate: DateTime.now(),
+                    );
+                    if (date != null) {
+                      setSheetState(() => birthDate = date);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  value: generation,
+                  decoration: const InputDecoration(
+                    labelText: 'Generation',
+                    prefixIcon: Icon(Icons.layers_outlined),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 0, child: Text('Root (Grandparents)')),
+                    DropdownMenuItem(value: 1, child: Text('1st Generation (Parents)')),
+                    DropdownMenuItem(value: 2, child: Text('2nd Generation (Self/Siblings)')),
+                    DropdownMenuItem(value: 3, child: Text('3rd Generation (Children)')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setSheetState(() => generation = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            if (nameController.text.trim().isEmpty) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(content: Text('Please enter a name')),
+                              );
+                              return;
+                            }
+                            setSheetState(() => saving = true);
+                            final familyProvider = context.read<FamilyProvider>();
+                            final node = await familyProvider.addFamilyMember(
+                              fullName: nameController.text.trim(),
+                              birthDate: birthDate,
+                              metadata: {'generation': generation},
+                            );
+                            if (ctx.mounted) {
+                              Navigator.pop(ctx);
+                            }
+                            if (mounted) {
+                              if (node != null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('${node.fullName} added to family tree')),
+                                );
+                              } else if (familyProvider.error != null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(familyProvider.error!)),
+                                );
+                              }
+                            }
+                          },
+                    child: saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Add Member'),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MemberCard extends StatelessWidget {
+  final String name;
+  final String generation;
+  final String initial;
+  final bool isFavorite;
+  final DateTime? birthDate;
+  final VoidCallback onTap;
+  final VoidCallback onFavoriteToggle;
+
+  const _MemberCard({
+    required this.name,
+    required this.generation,
+    required this.initial,
+    required this.isFavorite,
+    this.birthDate,
+    required this.onTap,
+    required this.onFavoriteToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: AppColors.primaryGradient,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withOpacity(0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            // Main content
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Avatar circle
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Text(
+                        initial,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Name
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  // Generation and birth year
+                  Text(
+                    birthDate != null
+                        ? '$generation • ${birthDate!.year}'
+                        : generation,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withOpacity(0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Favorite icon
+            Positioned(
+              top: 8,
+              right: 8,
+              child: GestureDetector(
+                onTap: onFavoriteToggle,
+                child: Icon(
+                  isFavorite ? Icons.favorite : Icons.favorite_border,
+                  color: isFavorite
+                      ? Colors.pinkAccent
+                      : Colors.white.withOpacity(0.6),
+                  size: 22,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: AppColors.primary),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
       ),
     );
   }

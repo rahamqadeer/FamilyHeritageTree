@@ -1,14 +1,8 @@
 import { createApp } from './app.js'
-import { appConfig, isFirebaseConfigured, supabaseConfig } from './config/env.js'
+import { appConfig, supabaseConfig } from './config/env.js'
 import { initSchema } from './db/initSchema.js'
 
 async function bootstrap () {
-  if (!isFirebaseConfigured()) {
-    console.warn(
-      'Firebase Admin credentials missing. Server will start, but /api routes require Firebase config.'
-    )
-  }
-
   if (supabaseConfig.postgresConnectionString) {
     try {
       await initSchema()

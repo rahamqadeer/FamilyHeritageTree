@@ -1,11 +1,10 @@
 import jwt from 'jsonwebtoken'
-import { getFirebaseAdmin } from '../config/firebaseAdmin.js'
-import { appConfig, isFirebaseConfigured } from '../config/env.js'
+import { appConfig } from '../config/env.js'
 import { supabaseAdmin } from '../config/supabaseClient.js'
 
-// This middleware expects either:
-// - A Firebase ID token in Authorization: Bearer <token>
-// - Or an internal JWT issued by this API that wraps a Firebase user
+// This middleware expects:
+// - A Supabase access token in Authorization: Bearer <token>
+// - Or an internal JWT issued by this API
 
 export async function authMiddleware (req, res, next) {
   try {
@@ -16,39 +15,33 @@ export async function authMiddleware (req, res, next) {
       return res.status(401).json({ message: 'Missing Authorization token' })
     }
 
-    if (!isFirebaseConfigured()) {
-      return res.status(503).json({
-        message:
-          'Firebase Admin is not configured. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY in .env, or set FIREBASE_SERVICE_ACCOUNT_PATH to your service account JSON file.'
-      })
-    }
-
-    const firebaseAdmin = getFirebaseAdmin()
-    if (!firebaseAdmin) {
-      return res.status(503).json({ message: 'Firebase Admin failed to initialize' })
-    }
-
-    let firebaseUser
+    let supabaseUser
     let internalPayload
 
-    try {
-      // Try verify as Firebase ID token
-      firebaseUser = await firebaseAdmin.auth().verifyIdToken(token)
-    } catch (err) {
+    // Try to verify as Supabase access token
+    const { data: { user: authUser }, error: supabaseError } = await supabaseAdmin.auth.getUser(token)
+
+    if (authUser && !supabaseError) {
+      supabaseUser = authUser
+    } else {
       // Fallback: verify as internal JWT
       try {
         internalPayload = jwt.verify(token, appConfig.jwtSecret)
-        firebaseUser = internalPayload.firebaseUser
+        supabaseUser = internalPayload.supabaseUser
       } catch {
         return res.status(401).json({ message: 'Invalid or expired token' })
       }
     }
 
-    // Ensure local user record exists in Supabase
+    if (!supabaseUser || !supabaseUser.id) {
+      return res.status(401).json({ message: 'Invalid token - no user found' })
+    }
+
+    // Ensure local user record exists in users table
     const { data: existingUser, error } = await supabaseAdmin
       .from('users')
       .select('*')
-      .eq('firebase_uid', firebaseUser.uid)
+      .eq('supabase_uid', supabaseUser.id)
       .single()
 
     if (error && error.code !== 'PGRST116') {
@@ -62,9 +55,9 @@ export async function authMiddleware (req, res, next) {
       const { data: inserted, error: insertError } = await supabaseAdmin
         .from('users')
         .insert({
-          firebase_uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          display_name: firebaseUser.name || firebaseUser.email
+          supabase_uid: supabaseUser.id,
+          email: supabaseUser.email,
+          display_name: supabaseUser.user_metadata?.full_name || supabaseUser.email
         })
         .select('*')
         .single()
@@ -78,7 +71,7 @@ export async function authMiddleware (req, res, next) {
     }
 
     req.auth = {
-      firebaseUser,
+      supabaseUser,
       user
     }
 
@@ -89,14 +82,14 @@ export async function authMiddleware (req, res, next) {
   }
 }
 
-// Issues a short-lived internal JWT after Firebase login if the client prefers
-export function issueInternalJwt (firebaseUser, user) {
+// Issues a short-lived internal JWT after Supabase login if the client prefers
+export function issueInternalJwt (supabaseUser, user) {
   const payload = {
     sub: user.id,
-    firebaseUid: firebaseUser.uid,
-    firebaseUser: {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email
+    supabaseUid: supabaseUser.id,
+    supabaseUser: {
+      id: supabaseUser.id,
+      email: supabaseUser.email
     }
   }
 

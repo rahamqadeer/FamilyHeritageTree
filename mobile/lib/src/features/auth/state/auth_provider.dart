@@ -42,10 +42,11 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> registerWithEmail(String email, String password) async {
+  Future<void> registerWithEmail(String email, String password, {String? displayName}) async {
     final response = await _supabase.auth.signUp(
       email: email,
       password: password,
+      data: displayName != null ? {'full_name': displayName} : null,
     );
 
     final token = response.session?.accessToken;
