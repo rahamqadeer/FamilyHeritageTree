@@ -12,12 +12,12 @@ export function createApp () {
   const app = express()
 
   app.use(helmet())
-  app.use(
-    cors({
-      origin: appConfig.clientBaseUrl,
-      credentials: true
-    })
-  )
+app.use(
+  cors({
+    origin: true,
+    credentials: true
+  })
+)
   app.use(express.json({ limit: '10mb' }))
   app.use(morgan('dev'))
 
