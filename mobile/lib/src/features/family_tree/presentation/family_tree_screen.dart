@@ -317,17 +317,15 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
               child: _buildEmptyState(),
             )
           else if (_showTreeDiagram)
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: MediaQuery.of(context).size.height * 0.58,
-                child: ColoredBox(
-                  color: AppColors.background,
-                  child: FamilyTreeDiagramView(
-                    tree: (familyProvider.familyTree ??
-                            FamilyTree(nodes: const [], relationships: const []))
-                        .subsetForNodes(filteredMembers),
-                    onNodeTap: (node) => _showMemberDetail(context, node),
-                  ),
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: ColoredBox(
+                color: AppColors.background,
+                child: FamilyTreeDiagramView(
+                  tree: (familyProvider.familyTree ??
+                          FamilyTree(nodes: const [], relationships: const []))
+                      .subsetForNodes(filteredMembers),
+                  onNodeTap: (node) => _showMemberDetail(context, node),
                 ),
               ),
             )
@@ -496,9 +494,15 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   }
 
   void _showMemberDetail(BuildContext context, FamilyTreeNode node) {
+    final familyProvider = context.read<FamilyProvider>();
+    final tree = familyProvider.familyTree;
     final genLabel = FamilyTreeNode.labelForGeneration(
       FamilyTreeNode.generationFromMetadata(node.metadata),
     );
+    final rels = tree?.relationshipsInvolving(node.id) ?? [];
+    final children = tree?.getChildrenOf(node.id) ?? [];
+    final spouses = tree?.getSpousesOf(node.id) ?? [];
+    final parents = tree?.getParentsOf(node.id) ?? [];
 
     showModalBottomSheet(
       context: context,
@@ -528,7 +532,8 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Column(
+                child: SingleChildScrollView(
+                  child: Column(
                   children: [
                     MemberAvatar(
                       node: node,
@@ -559,6 +564,12 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                             icon: genderIcon(node.gender),
                             label: node.gender.label,
                           ),
+                        _MetaChip(
+                          icon: node.isDeceased ? Icons.spa : Icons.favorite_border,
+                          label: node.isDeceased
+                              ? 'Deceased'
+                              : (spouses.isNotEmpty ? 'Married' : 'Single'),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -597,6 +608,35 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                           ],
                         ),
                       ),
+                    if (parents.isNotEmpty || spouses.isNotEmpty || children.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Relationships',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (parents.isNotEmpty)
+                        _RelationListTile(
+                          title: 'Parents',
+                          names: parents.map((n) => n.fullName).join(', '),
+                        ),
+                      if (spouses.isNotEmpty)
+                        _RelationListTile(
+                          title: 'Spouse${spouses.length > 1 ? 's' : ''}',
+                          names: spouses.map((n) => n.fullName).join(', '),
+                        ),
+                      if (children.isNotEmpty)
+                        _RelationListTile(
+                          title: 'Children',
+                          names: children.map((n) => n.fullName).join(', '),
+                        ),
+                      for (final r in rels)
+                        if (!['Parent', 'Child', 'Spouse'].contains(r.label))
+                          _RelationListTile(title: r.label, names: r.otherMember.fullName),
+                    ],
                     const SizedBox(height: 16),
                     const Divider(),
                     const SizedBox(height: 16),
@@ -631,6 +671,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                       ],
                     ),
                   ],
+                ),
                 ),
               ),
             ),
@@ -1176,6 +1217,41 @@ class _GenerationSectionHeader extends StatelessWidget {
             style: const TextStyle(
               color: AppColors.textSecondary,
               fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RelationListTile extends StatelessWidget {
+  final String title;
+  final String names;
+
+  const _RelationListTile({required this.title, required this.names});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 72,
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              names,
+              style: const TextStyle(color: AppColors.textPrimary),
             ),
           ),
         ],

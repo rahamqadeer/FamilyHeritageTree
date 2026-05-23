@@ -34,6 +34,9 @@ class Family {
     'created_at': createdAt.toIso8601String(),
     'role': role,
   };
+
+  /// View-only invites receive JUNIOR role.
+  bool get canEdit => role == 'ADMIN' || role == 'ADULT';
 }
 
 class FamilyMember {

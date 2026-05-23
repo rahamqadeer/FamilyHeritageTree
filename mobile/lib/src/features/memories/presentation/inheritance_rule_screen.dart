@@ -65,6 +65,16 @@ class _InheritanceRuleScreenState extends State<InheritanceRuleScreen> {
       return;
     }
 
+    if (_selectedCondition == ConditionType.unlockOnBirthday &&
+        _selectedBeneficiary?.birthDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Beneficiary must have a birth date for birthday unlock'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
 
     final familyProvider = context.read<FamilyProvider>();
@@ -353,9 +363,44 @@ class _InheritanceRuleScreenState extends State<InheritanceRuleScreen> {
               isSelected: _selectedCondition == ConditionType.unlockAtAge,
               onTap: () => setState(() => _selectedCondition = ConditionType.unlockAtAge),
             ),
+            const SizedBox(height: 12),
+            _ConditionOption(
+              icon: Icons.celebration,
+              title: 'Unlock on birthday',
+              subtitle: 'Visible only on the beneficiary\'s birthday each year',
+              isSelected: _selectedCondition == ConditionType.unlockOnBirthday,
+              onTap: () => setState(() => _selectedCondition = ConditionType.unlockOnBirthday),
+            ),
             const SizedBox(height: 24),
             // Condition value input
-            if (_selectedCondition == ConditionType.unlockAtDate) ...[
+            if (_selectedCondition == ConditionType.unlockOnBirthday) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.15)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.celebration, color: AppColors.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _selectedBeneficiary?.birthDate != null
+                            ? 'Unlocks each year on ${DateFormat.MMMd().format(_selectedBeneficiary!.birthDate!)}'
+                            : 'Select a beneficiary with a birth date in the family tree.',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (_selectedCondition == ConditionType.unlockAtDate) ...[
               const Text(
                 'Select Unlock Date',
                 style: TextStyle(

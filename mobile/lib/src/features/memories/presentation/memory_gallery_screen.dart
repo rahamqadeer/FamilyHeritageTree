@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:family_digital_heritage_vault/src/core/models/memory.dart';
 import 'package:family_digital_heritage_vault/src/core/services/service_locator.dart';
 import 'package:family_digital_heritage_vault/src/core/theme/app_theme.dart';
+import 'package:family_digital_heritage_vault/src/features/family/state/family_provider.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/presentation/memory_detail_screen.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/presentation/memory_upload_screen.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/state/memory_provider.dart';
@@ -19,6 +20,7 @@ class MemoryGalleryScreen extends StatefulWidget {
 class _MemoryGalleryScreenState extends State<MemoryGalleryScreen> {
   final TextEditingController _searchController = TextEditingController();
   MediaType? _selectedFilter;
+  bool _showInheritanceOnly = false;
 
   @override
   void dispose() {
@@ -32,6 +34,10 @@ class _MemoryGalleryScreenState extends State<MemoryGalleryScreen> {
     // Apply media type filter
     if (_selectedFilter != null) {
       memories = provider.filterByType(_selectedFilter);
+    }
+
+    if (_showInheritanceOnly) {
+      memories = memories.where((m) => m.isLocked).toList();
     }
 
     // Apply search filter
@@ -203,6 +209,15 @@ class _MemoryGalleryScreenState extends State<MemoryGalleryScreen> {
                       isSelected: _selectedFilter == MediaType.document,
                       onSelected: () => setState(() => _selectedFilter = MediaType.document),
                     ),
+                    const SizedBox(width: 8),
+                    _FilterChip(
+                      label: 'Locked',
+                      count: memoryProvider.memories.where((m) => m.isLocked).length,
+                      isSelected: _showInheritanceOnly,
+                      onSelected: () => setState(() {
+                        _showInheritanceOnly = !_showInheritanceOnly;
+                      }),
+                    ),
                   ],
                 ),
               ),
@@ -245,21 +260,29 @@ class _MemoryGalleryScreenState extends State<MemoryGalleryScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const MemoryUploadScreen(),
-            ),
-          );
-        },
-        backgroundColor: AppColors.primary,
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: context.watch<FamilyProvider>().selectedFamily?.canEdit ?? false
+          ? FloatingActionButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const MemoryUploadScreen(),
+                  ),
+                );
+              },
+              backgroundColor: AppColors.primary,
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 
   Future<void> _openMemory(BuildContext context, Memory memory) async {
+    if (memory.isLocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(memory.inheritanceLockLabel)),
+      );
+      return;
+    }
     try {
       final fresh = await services.memoryService.getMemory(memory.id);
       if (!context.mounted) return;
@@ -491,6 +514,31 @@ class _MemoryCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (memory.isLocked)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black.withOpacity(0.55),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.lock_clock, color: Colors.white, size: 36),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(
+                            memory.inheritanceLockLabel,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               // Type badge
               Positioned(
                 top: 8,

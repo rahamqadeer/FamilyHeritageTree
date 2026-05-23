@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../config/supabaseClient.js'
+import { calculateAge, isRuleSatisfied } from '../utils/inheritanceEvaluator.js'
 
 // Inheritance middleware:
 // Every memory access that may be protected passes through here.
@@ -69,53 +70,26 @@ export function enforceInheritanceRules () {
 
       const now = new Date()
 
-      // Helper to calculate age in years given birth_date
-      function calculateAge (birthDate) {
-        if (!birthDate) return null
-        const birth = new Date(birthDate)
-        let age = now.getFullYear() - birth.getFullYear()
-        const m = now.getMonth() - birth.getMonth()
-        if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) {
-          age--
-        }
-        return age
-      }
-
       for (const rule of rules) {
-        // Rule applies only if current user is the beneficiary
         if (!userNodeIds.includes(rule.beneficiary_node_id)) {
           continue
         }
 
-        if (rule.condition_type === 'UNLOCK_AT_DATE') {
-          if (!rule.unlock_date) {
-            console.warn('Inheritance rule missing unlock_date', rule.id)
-            // Defensive: if misconfigured, block access to avoid premature disclosure
-            return res.status(403).json({ message: 'Inheritance rule not yet satisfied' })
+        const beneficiaryNode = (userNodes || []).find(n => n.id === rule.beneficiary_node_id)
+        if (!isRuleSatisfied(rule, beneficiaryNode?.birth_date, now)) {
+          const payload = {
+            message: 'Inheritance memory is locked',
+            conditionType: rule.condition_type
           }
-          const unlockDate = new Date(rule.unlock_date)
-          if (now < unlockDate) {
-            return res.status(403).json({
-              message: 'Inheritance memory is locked until specified unlock date',
-              unlockDate: rule.unlock_date
-            })
+          if (rule.condition_type === 'UNLOCK_AT_DATE') {
+            payload.unlockDate = rule.unlock_date
+          } else if (rule.condition_type === 'UNLOCK_AT_AGE') {
+            payload.requiredAge = rule.unlock_age
+            payload.currentAge = calculateAge(beneficiaryNode?.birth_date, now)
+          } else if (rule.condition_type === 'UNLOCK_ON_BIRTHDAY') {
+            payload.hint = 'This memory unlocks on the beneficiary\'s birthday each year'
           }
-        } else if (rule.condition_type === 'UNLOCK_AT_AGE') {
-          if (!rule.unlock_age) {
-            console.warn('Inheritance rule missing unlock_age', rule.id)
-            return res.status(403).json({ message: 'Inheritance rule not yet satisfied' })
-          }
-
-          const beneficiaryNode = (userNodes || []).find(n => n.id === rule.beneficiary_node_id)
-          const age = calculateAge(beneficiaryNode?.birth_date)
-
-          if (age == null || age < rule.unlock_age) {
-            return res.status(403).json({
-              message: 'Inheritance memory is locked until beneficiary reaches required age',
-              requiredAge: rule.unlock_age,
-              currentAge: age
-            })
-          }
+          return res.status(403).json(payload)
         }
       }
 

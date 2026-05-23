@@ -246,30 +246,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  // Biometric login
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final success = await auth.tryBiometricLogin();
-                      if (success && mounted) {
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => const MainScreen()),
-                          (route) => false,
-                        );
-                      } else if (!success && mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Biometric login not available'),
-                          ),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.fingerprint),
-                    label: const Text('Login with Biometrics'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 50),
-                    ),
-                  ),
                   const SizedBox(height: 32),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,

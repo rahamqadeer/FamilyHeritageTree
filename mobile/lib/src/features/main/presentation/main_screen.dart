@@ -1,5 +1,6 @@
 import 'package:family_digital_heritage_vault/src/core/theme/app_theme.dart';
 import 'package:family_digital_heritage_vault/src/features/dashboard/presentation/dashboard_screen.dart';
+import 'package:family_digital_heritage_vault/src/features/family/presentation/invite_accept_screen.dart';
 import 'package:family_digital_heritage_vault/src/features/family/state/family_provider.dart';
 import 'package:family_digital_heritage_vault/src/features/family_tree/presentation/family_tree_screen.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/presentation/memory_gallery_screen.dart';
@@ -43,6 +44,22 @@ class _MainScreenState extends State<MainScreen> {
       final memoryProvider = context.read<MemoryProvider>();
       await memoryProvider.loadMemories(familyProvider.selectedFamily!.id);
     }
+
+    _handleInviteDeepLink();
+  }
+
+  void _handleInviteDeepLink() {
+    final token = Uri.base.queryParameters['invite'];
+    if (token == null || token.isEmpty || !mounted) return;
+
+    final familyProvider = context.read<FamilyProvider>();
+    familyProvider.setPendingInviteToken(token);
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InviteAcceptScreen(token: token),
+      ),
+    );
   }
 
   @override

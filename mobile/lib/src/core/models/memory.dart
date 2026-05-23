@@ -62,6 +62,8 @@ class Memory {
   final DateTime? eventDate;
   final List<String>? tags;
   final DateTime createdAt;
+  final bool isLocked;
+  final String? inheritanceConditionType;
 
   Memory({
     required this.id,
@@ -76,6 +78,8 @@ class Memory {
     this.eventDate,
     this.tags,
     required this.createdAt,
+    this.isLocked = false,
+    this.inheritanceConditionType,
   });
 
   factory Memory.fromJson(Map<String, dynamic> json) {
@@ -98,7 +102,23 @@ class Memory {
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : DateTime.now(),
+      isLocked: json['locked'] == true,
+      inheritanceConditionType:
+          (json['inheritance_info'] as Map<String, dynamic>?)?['condition_type'] as String?,
     );
+  }
+
+  String get inheritanceLockLabel {
+    switch (inheritanceConditionType) {
+      case 'UNLOCK_AT_DATE':
+        return 'Unlocks on a set date';
+      case 'UNLOCK_AT_AGE':
+        return 'Unlocks at a set age';
+      case 'UNLOCK_ON_BIRTHDAY':
+        return 'Unlocks on birthday';
+      default:
+        return 'Inheritance locked';
+    }
   }
 
   /// URL used to load memory media in the gallery and detail views.
@@ -125,7 +145,8 @@ class Memory {
 
 enum ConditionType {
   unlockAtDate,
-  unlockAtAge;
+  unlockAtAge,
+  unlockOnBirthday;
 
   String get value {
     switch (this) {
@@ -133,6 +154,8 @@ enum ConditionType {
         return 'UNLOCK_AT_DATE';
       case ConditionType.unlockAtAge:
         return 'UNLOCK_AT_AGE';
+      case ConditionType.unlockOnBirthday:
+        return 'UNLOCK_ON_BIRTHDAY';
     }
   }
 
@@ -142,6 +165,8 @@ enum ConditionType {
         return ConditionType.unlockAtDate;
       case 'UNLOCK_AT_AGE':
         return ConditionType.unlockAtAge;
+      case 'UNLOCK_ON_BIRTHDAY':
+        return ConditionType.unlockOnBirthday;
       default:
         return ConditionType.unlockAtDate;
     }
@@ -153,6 +178,8 @@ enum ConditionType {
         return 'Unlock on specific date';
       case ConditionType.unlockAtAge:
         return 'Unlock when beneficiary reaches age';
+      case ConditionType.unlockOnBirthday:
+        return 'Unlock on beneficiary\'s birthday';
     }
   }
 }

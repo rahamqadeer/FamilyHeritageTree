@@ -11,8 +11,10 @@ class FamilyProvider extends ChangeNotifier {
   FamilyTree? _familyTree;
   bool _loading = false;
   String? _error;
+  String? _pendingInviteToken;
 
   List<Family> get families => _families;
+  String? get pendingInviteToken => _pendingInviteToken;
   Family? get selectedFamily => _selectedFamily;
   FamilyTree? get familyTree => _familyTree;
   bool get loading => _loading;
@@ -62,24 +64,66 @@ class FamilyProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> inviteMember({
+  void setPendingInviteToken(String? token) {
+    _pendingInviteToken = token;
+    notifyListeners();
+  }
+
+  Future<String?> inviteMember({
     required String email,
-    String role = 'ADULT',
+    String accessLevel = 'edit',
   }) async {
-    if (_selectedFamily == null) return;
+    if (_selectedFamily == null) return 'No family selected';
 
     _loading = true;
     _error = null;
     notifyListeners();
 
     try {
-      await services.familyService.inviteMember(
+      final result = await services.familyService.inviteMember(
         familyId: _selectedFamily!.id,
         email: email,
-        role: role,
+        accessLevel: accessLevel,
       );
+      return result['message'] as String? ??
+          (result['emailSent'] == true
+              ? 'Invitation email sent'
+              : 'Invitation created — share the link from the server log if email is not configured');
     } catch (e) {
       _error = 'Failed to invite member: ${e.toString()}';
+      return _error;
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<Map<String, dynamic>> previewInvitation(String token) async {
+    return services.familyService.previewInvitation(token);
+  }
+
+  Future<String?> acceptInvitation(String token) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final result = await services.familyService.acceptInvitation(token);
+      _pendingInviteToken = null;
+      await loadFamilies();
+      final familyId = result['familyId'] as String?;
+      if (familyId != null) {
+        for (final family in _families) {
+          if (family.id == familyId) {
+            await selectFamily(family);
+            break;
+          }
+        }
+      }
+      return result['message'] as String? ?? 'Joined family successfully';
+    } catch (e) {
+      _error = 'Failed to accept invitation: ${e.toString()}';
+      return _error;
     } finally {
       _loading = false;
       notifyListeners();

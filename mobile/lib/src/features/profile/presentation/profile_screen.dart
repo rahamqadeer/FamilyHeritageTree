@@ -116,18 +116,6 @@ class ProfileScreen extends StatelessWidget {
                         ),
                         const Divider(height: 1),
                         _SettingsTile(
-                          icon: Icons.fingerprint,
-                          title: 'Biometric Login',
-                          trailing: Switch(
-                            value: false,
-                            onChanged: (value) {
-                              // TODO: Toggle biometric
-                            },
-                            activeColor: AppColors.primary,
-                          ),
-                        ),
-                        const Divider(height: 1),
-                        _SettingsTile(
                           icon: Icons.notifications_outlined,
                           title: 'Notifications',
                           onTap: () {

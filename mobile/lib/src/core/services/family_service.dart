@@ -20,14 +20,28 @@ class FamilyService {
     });
   }
 
-  Future<void> inviteMember({
+  Future<Map<String, dynamic>> inviteMember({
     required String familyId,
     required String email,
-    String role = 'ADULT',
+    String accessLevel = 'edit',
   }) async {
-    await _client.post(
+    final response = await _client.post(
       '/api/families/$familyId/invite',
-      body: {'email': email, 'role': role},
+      body: {'email': email, 'accessLevel': accessLevel},
     );
+    return response as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> acceptInvitation(String token) async {
+    final response = await _client.post(
+      '/api/invitations/accept',
+      body: {'token': token},
+    );
+    return response as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> previewInvitation(String token) async {
+    final response = await _client.get('/api/invitations/$token');
+    return response as Map<String, dynamic>;
   }
 }

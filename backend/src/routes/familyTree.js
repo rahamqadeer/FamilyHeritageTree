@@ -2,6 +2,7 @@ import express from 'express'
 import multer from 'multer'
 import { supabaseAdmin } from '../config/supabaseClient.js'
 import { requireFamilyRole } from '../middlewares/roleMiddleware.js'
+import { requireEditAccess } from '../middlewares/editAccessMiddleware.js'
 import { resolveStorageMediaUrl, STORAGE_BUCKET } from '../utils/storageMedia.js'
 
 const router = express.Router()
@@ -36,6 +37,7 @@ router.post(
   '/:familyId/nodes/:nodeId/photo',
   upload.single('file'),
   requireFamilyRole(['ADMIN', 'ADULT']),
+  requireEditAccess(),
   async (req, res) => {
     try {
       const { familyId, nodeId } = req.params
@@ -101,7 +103,7 @@ router.post(
 )
 
 // Create or update a family tree node
-router.post('/:familyId/nodes', requireFamilyRole(['ADMIN', 'ADULT']), async (req, res) => {
+router.post('/:familyId/nodes', requireFamilyRole(['ADMIN', 'ADULT']), requireEditAccess(), async (req, res) => {
   try {
     const { familyId } = req.params
     const { id, fullName, birthDate, deathDate, metadata, userId } = req.body
@@ -171,7 +173,7 @@ router.post('/:familyId/nodes', requireFamilyRole(['ADMIN', 'ADULT']), async (re
 })
 
 // Define relationships between nodes
-router.post('/:familyId/relationships', requireFamilyRole(['ADMIN', 'ADULT']), async (req, res) => {
+router.post('/:familyId/relationships', requireFamilyRole(['ADMIN', 'ADULT']), requireEditAccess(), async (req, res) => {
   try {
     const { familyId } = req.params
     const { fromNodeId, toNodeId, type } = req.body
@@ -211,6 +213,7 @@ router.post('/:familyId/relationships', requireFamilyRole(['ADMIN', 'ADULT']), a
 router.delete(
   '/:familyId/relationships/:relationshipId',
   requireFamilyRole(['ADMIN', 'ADULT']),
+  requireEditAccess(),
   async (req, res) => {
     try {
       const { familyId, relationshipId } = req.params

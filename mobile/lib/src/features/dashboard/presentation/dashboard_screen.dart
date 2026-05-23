@@ -442,7 +442,7 @@ class DashboardScreen extends StatelessWidget {
 
   void _showInviteDialog(BuildContext context) {
     final emailController = TextEditingController();
-    String selectedRole = 'ADULT';
+    String accessLevel = 'edit';
 
     showDialog(
       context: context,
@@ -452,28 +452,38 @@ class DashboardScreen extends StatelessWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              const Text(
+                'They will receive an email with a link to join your family vault.',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 12),
               TextField(
                 controller: emailController,
                 decoration: const InputDecoration(
-                  labelText: 'Email',
+                  labelText: 'Email address',
                   prefixIcon: Icon(Icons.email_outlined),
                 ),
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: selectedRole,
+                value: accessLevel,
                 decoration: const InputDecoration(
-                  labelText: 'Role',
-                  prefixIcon: Icon(Icons.badge_outlined),
+                  labelText: 'Access level',
+                  prefixIcon: Icon(Icons.security_outlined),
                 ),
                 items: const [
-                  DropdownMenuItem(value: 'ADMIN', child: Text('Admin')),
-                  DropdownMenuItem(value: 'ADULT', child: Text('Adult')),
-                  DropdownMenuItem(value: 'JUNIOR', child: Text('Junior')),
+                  DropdownMenuItem(
+                    value: 'view',
+                    child: Text('View only — browse tree & memories'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'edit',
+                    child: Text('Can edit — add members & memories'),
+                  ),
                 ],
                 onChanged: (value) {
-                  setState(() => selectedRole = value!);
+                  if (value != null) setState(() => accessLevel = value);
                 },
               ),
             ],
@@ -485,21 +495,22 @@ class DashboardScreen extends StatelessWidget {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (emailController.text.isNotEmpty) {
-                  final familyProvider = context.read<FamilyProvider>();
-                  await familyProvider.inviteMember(
-                    email: emailController.text.trim(),
-                    role: selectedRole,
+                if (emailController.text.isEmpty) return;
+                final familyProvider = context.read<FamilyProvider>();
+                final message = await familyProvider.inviteMember(
+                  email: emailController.text.trim(),
+                  accessLevel: accessLevel,
+                );
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(message ?? 'Invitation sent'),
+                    ),
                   );
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Invitation sent!')),
-                    );
-                  }
                 }
               },
-              child: const Text('Invite'),
+              child: const Text('Send invite'),
             ),
           ],
         ),

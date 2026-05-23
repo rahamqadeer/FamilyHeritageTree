@@ -1,12 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthProvider extends ChangeNotifier {
   final _supabase = Supabase.instance.client;
   final _secureStorage = const FlutterSecureStorage();
-  final _localAuth = LocalAuthentication();
 
   bool _isAuthenticated = false;
   bool get isAuthenticated => _isAuthenticated;
@@ -56,27 +54,6 @@ class AuthProvider extends ChangeNotifier {
 
     _isAuthenticated = response.session != null;
     notifyListeners();
-  }
-
-  Future<bool> tryBiometricLogin() async {
-    final canCheck = await _localAuth.canCheckBiometrics;
-    if (!canCheck) return false;
-
-    final didAuth = await _localAuth.authenticate(
-      localizedReason: 'Authenticate to access your Family Vault',
-      options: const AuthenticationOptions(
-        biometricOnly: true,
-        stickyAuth: true,
-      ),
-    );
-
-    if (didAuth && _supabase.auth.currentUser != null) {
-      _isAuthenticated = true;
-      notifyListeners();
-      return true;
-    }
-
-    return false;
   }
 
   Future<void> signOut() async {

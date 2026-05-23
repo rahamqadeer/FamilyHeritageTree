@@ -15,7 +15,7 @@ export const appConfig = {
   port: process.env.PORT || 4000,
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET || 'change-this-secret-in-production',
-  clientBaseUrl: process.env.CLIENT_BASE_URL || 'http://localhost:8080'
+  clientBaseUrl: process.env.CLIENT_BASE_URL || 'http://localhost:7357'
 }
 
 export const supabaseConfig = {

@@ -2,7 +2,9 @@ import express from 'express'
 import multer from 'multer'
 import { supabaseAdmin } from '../config/supabaseClient.js'
 import { requireFamilyRole } from '../middlewares/roleMiddleware.js'
+import { requireEditAccess } from '../middlewares/editAccessMiddleware.js'
 import { enforceInheritanceRules } from '../middlewares/inheritanceMiddleware.js'
+import { evaluateMemoryLockForUser } from '../utils/inheritanceEvaluator.js'
 
 const router = express.Router()
 const upload = multer({
@@ -56,16 +58,63 @@ async function resolveMemoryMediaUrl (storagePath) {
   return pub.publicUrl
 }
 
-async function serializeMemory (row) {
+async function serializeMemory (row, { locked = false } = {}) {
   if (!row) return row
-  const mediaUrl = row.storage_path
+  const mediaUrl = !locked && row.storage_path
     ? await resolveMemoryMediaUrl(row.storage_path)
     : null
   return {
     ...row,
     created_at: row.created_at ?? new Date().toISOString(),
-    media_url: mediaUrl
+    media_url: mediaUrl,
+    locked
   }
+}
+
+async function enrichMemoriesWithInheritance (memories, userId, familyId) {
+  if (!memories?.length) return memories
+
+  const memoryIds = memories.map((m) => m.id)
+
+  const [{ data: rules }, { data: userNodes }] = await Promise.all([
+    supabaseAdmin
+      .from('inheritance_rules')
+      .select('memory_id, condition_type, unlock_date, unlock_age, beneficiary_node_id')
+      .eq('family_id', familyId)
+      .in('memory_id', memoryIds),
+    supabaseAdmin
+      .from('family_tree_nodes')
+      .select('id, birth_date')
+      .eq('family_id', familyId)
+      .eq('user_id', userId)
+  ])
+
+  const userNodeIds = (userNodes || []).map((n) => n.id)
+  const nodesById = Object.fromEntries((userNodes || []).map((n) => [n.id, n]))
+  const rulesByMemory = {}
+  for (const rule of rules || []) {
+    if (!rulesByMemory[rule.memory_id]) rulesByMemory[rule.memory_id] = []
+    rulesByMemory[rule.memory_id].push(rule)
+  }
+
+  return Promise.all(
+    memories.map(async (memory) => {
+      const lock = evaluateMemoryLockForUser({
+        rules: rulesByMemory[memory.id] || [],
+        userNodeIds,
+        nodesById
+      })
+      const serialized = await serializeMemory(memory, { locked: lock.locked })
+      if (lock.locked) {
+        serialized.inheritance_info = {
+          condition_type: lock.conditionType,
+          unlock_date: lock.unlockDate,
+          unlock_age: lock.unlockAge
+        }
+      }
+      return serialized
+    })
+  )
 }
 
 // Upload media file to Supabase Storage (service role — works on web & mobile)
@@ -73,6 +122,7 @@ router.post(
   '/upload-media',
   upload.single('file'),
   requireFamilyRole(['ADMIN', 'ADULT']),
+  requireEditAccess(),
   async (req, res) => {
     try {
       const familyId = req.body.familyId || req.params.familyId
@@ -118,7 +168,7 @@ router.post(
 )
 
 // Create memory metadata after media is uploaded
-router.post('/', requireFamilyRole(['ADMIN', 'ADULT']), async (req, res) => {
+router.post('/', requireFamilyRole(['ADMIN', 'ADULT']), requireEditAccess(), async (req, res) => {
   try {
     const {
       familyId,
@@ -198,7 +248,8 @@ router.get('/', requireFamilyRole(['ADMIN', 'ADULT', 'JUNIOR']), async (req, res
       return res.status(500).json({ message: 'Failed to list memories' })
     }
 
-    const memories = await Promise.all((data ?? []).map(serializeMemory))
+    const userId = req.auth.user.id
+    const memories = await enrichMemoriesWithInheritance(data ?? [], userId, familyId)
     res.json(memories)
   } catch (err) {
     console.error('List memories error', err)
@@ -238,7 +289,7 @@ router.post('/:memoryId/inheritance-rules', requireFamilyRole(['ADMIN']), async 
       return res.status(400).json({ message: 'familyId, beneficiaryNodeId and conditionType are required' })
     }
 
-    if (!['UNLOCK_AT_DATE', 'UNLOCK_AT_AGE'].includes(conditionType)) {
+    if (!['UNLOCK_AT_DATE', 'UNLOCK_AT_AGE', 'UNLOCK_ON_BIRTHDAY'].includes(conditionType)) {
       return res.status(400).json({ message: 'Invalid conditionType' })
     }
 
@@ -248,6 +299,19 @@ router.post('/:memoryId/inheritance-rules', requireFamilyRole(['ADMIN']), async 
 
     if (conditionType === 'UNLOCK_AT_AGE' && !unlockAge) {
       return res.status(400).json({ message: 'unlockAge required for UNLOCK_AT_AGE' })
+    }
+
+    if (conditionType === 'UNLOCK_ON_BIRTHDAY') {
+      const { data: beneficiary } = await supabaseAdmin
+        .from('family_tree_nodes')
+        .select('birth_date')
+        .eq('id', beneficiaryNodeId)
+        .single()
+      if (!beneficiary?.birth_date) {
+        return res.status(400).json({
+          message: 'Beneficiary must have a birth date for birthday unlock rules'
+        })
+      }
     }
 
     const { data: rule, error } = await supabaseAdmin

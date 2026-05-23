@@ -5,6 +5,7 @@ import morgan from 'morgan'
 import { appConfig } from './config/env.js'
 import { authMiddleware } from './middlewares/authMiddleware.js'
 import familiesRouter from './routes/families.js'
+import { invitationsRouter } from './routes/invitations.js'
 import memoriesRouter from './routes/memories.js'
 import treeRouter from './routes/familyTree.js'
 
@@ -29,6 +30,7 @@ app.use(
   app.use('/api', authMiddleware)
 
   app.use('/api/families', familiesRouter)
+  app.use('/api/invitations', invitationsRouter)
   app.use('/api/memories', memoriesRouter)
   app.use('/api/family-tree', treeRouter)
 
