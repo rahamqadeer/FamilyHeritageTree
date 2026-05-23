@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:family_digital_heritage_vault/src/core/models/memory.dart';
 import 'package:family_digital_heritage_vault/src/core/theme/app_theme.dart';
 import 'package:family_digital_heritage_vault/src/features/family/state/family_provider.dart';
@@ -22,7 +23,7 @@ class _MemoryUploadScreenState extends State<MemoryUploadScreen> {
   final _eventController = TextEditingController();
   final _tagsController = TextEditingController();
 
-  File? _selectedFile;
+  XFile? _selectedFile;
   MediaType _selectedMediaType = MediaType.image;
   DateTime? _eventDate;
   List<String> _selectedPeopleIds = [];
@@ -48,7 +49,7 @@ class _MemoryUploadScreenState extends State<MemoryUploadScreen> {
     );
     if (picked != null) {
       setState(() {
-        _selectedFile = File(picked.path);
+        _selectedFile = picked;
         _selectedMediaType = MediaType.image;
       });
     }
@@ -61,7 +62,7 @@ class _MemoryUploadScreenState extends State<MemoryUploadScreen> {
     );
     if (picked != null) {
       setState(() {
-        _selectedFile = File(picked.path);
+        _selectedFile = picked;
         _selectedMediaType = MediaType.video;
       });
     }
@@ -76,7 +77,7 @@ class _MemoryUploadScreenState extends State<MemoryUploadScreen> {
     );
     if (picked != null) {
       setState(() {
-        _selectedFile = File(picked.path);
+        _selectedFile = picked;
         _selectedMediaType = MediaType.image;
       });
     }
@@ -286,11 +287,21 @@ class _MemoryUploadScreenState extends State<MemoryUploadScreen> {
                           ClipRRect(
                             borderRadius: BorderRadius.circular(16),
                             child: _selectedMediaType == MediaType.image
-                                ? Image.file(
-                                    _selectedFile!,
-                                    width: double.infinity,
-                                    height: 200,
-                                    fit: BoxFit.cover,
+                                ? FutureBuilder<Uint8List>(
+                                    future: _selectedFile!.readAsBytes(),
+                                    builder: (context, snapshot) {
+                                      if (!snapshot.hasData) {
+                                        return const Center(
+                                          child: CircularProgressIndicator(),
+                                        );
+                                      }
+                                      return Image.memory(
+                                        snapshot.data!,
+                                        width: double.infinity,
+                                        height: 200,
+                                        fit: BoxFit.cover,
+                                      );
+                                    },
                                   )
                                 : Container(
                                     color: AppColors.primary.withOpacity(0.1),

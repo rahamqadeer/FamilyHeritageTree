@@ -1,7 +1,9 @@
 import 'package:family_digital_heritage_vault/src/core/models/family_tree_node.dart';
 import 'package:family_digital_heritage_vault/src/core/theme/app_theme.dart';
 import 'package:family_digital_heritage_vault/src/features/family/state/family_provider.dart';
+import 'package:family_digital_heritage_vault/src/features/family_tree/presentation/member_form_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -15,7 +17,7 @@ class FamilyTreeScreen extends StatefulWidget {
 class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedGeneration = 'All';
-  final List<String> _generations = ['All', '1st Gen', '2nd Gen', '3rd Gen'];
+  final List<String> _generations = FamilyTreeNode.generationFilterChips;
   final Set<String> _favoriteIds = {};
 
   List<FamilyTreeNode> _getFilteredMembers(FamilyProvider provider) {
@@ -29,21 +31,24 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       }).toList();
     }
 
-    // Filter by generation (using metadata or relationships to determine generation)
-    if (_selectedGeneration != 'All') {
-      final genLevel = _selectedGeneration == '1st Gen'
-          ? 1
-          : _selectedGeneration == '2nd Gen'
-              ? 2
-              : 3;
+    final filterLevel = FamilyTreeNode.filterLevelForChip(_selectedGeneration);
+    if (filterLevel != null) {
       nodes = nodes.where((n) {
-        final nodeGen = n.metadata?['generation'] as int? ?? 1;
-        return nodeGen == genLevel;
+        return FamilyTreeNode.generationFromMetadata(n.metadata) == filterLevel;
       }).toList();
     }
 
+    nodes.sort((a, b) {
+      final g = a.generation.compareTo(b.generation);
+      if (g != 0) return g;
+      return a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase());
+    });
+
     return nodes;
   }
+
+  bool get _showGenerationSections =>
+      _selectedGeneration == 'All' && _searchController.text.trim().isEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -208,8 +213,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
             SliverFillRemaining(
               child: _buildEmptyState(),
             )
+          else if (_showGenerationSections)
+            ..._buildGenerationSectionSlivers(context, filteredMembers)
           else
-            // Member grid
             SliverPadding(
               padding: const EdgeInsets.all(16),
               sliver: SliverGrid(
@@ -217,28 +223,15 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                   crossAxisCount: 2,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
-                  childAspectRatio: 0.9,
+                  childAspectRatio: 0.85,
                 ),
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final node = filteredMembers[index];
-                    final genLevel = node.metadata?['generation'] as int? ?? 1;
-                    final genLabel = genLevel == 0
-                        ? 'Root'
-                        : genLevel == 1
-                            ? '1st Gen'
-                            : genLevel == 2
-                                ? '2nd Gen'
-                                : '3rd Gen';
                     return _MemberCard(
-                      name: node.fullName,
-                      generation: genLabel,
-                      initial: node.initials,
+                      node: node,
                       isFavorite: _favoriteIds.contains(node.id),
-                      birthDate: node.birthDate,
-                      onTap: () {
-                        _showMemberDetail(context, node);
-                      },
+                      onTap: () => _showMemberDetail(context, node),
                       onFavoriteToggle: () {
                         setState(() {
                           if (_favoriteIds.contains(node.id)) {
@@ -267,6 +260,65 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
         child: const Icon(Icons.person_add),
       ),
     );
+  }
+
+  List<Widget> _buildGenerationSectionSlivers(
+    BuildContext context,
+    List<FamilyTreeNode> members,
+  ) {
+    final byGeneration = <int, List<FamilyTreeNode>>{};
+    for (final node in members) {
+      byGeneration.putIfAbsent(node.generation, () => []).add(node);
+    }
+    final levels = byGeneration.keys.toList()..sort();
+
+    final slivers = <Widget>[];
+    for (final level in levels) {
+      final group = byGeneration[level]!
+        ..sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
+      slivers.add(
+        SliverToBoxAdapter(
+          child: _GenerationSectionHeader(
+            level: level,
+            count: group.length,
+          ),
+        ),
+      );
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 0.85,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final node = group[index];
+                return _MemberCard(
+                  node: node,
+                  isFavorite: _favoriteIds.contains(node.id),
+                  onTap: () => _showMemberDetail(context, node),
+                  onFavoriteToggle: () {
+                    setState(() {
+                      if (_favoriteIds.contains(node.id)) {
+                        _favoriteIds.remove(node.id);
+                      } else {
+                        _favoriteIds.add(node.id);
+                      }
+                    });
+                  },
+                );
+              },
+              childCount: group.length,
+            ),
+          ),
+        ),
+      );
+    }
+    return slivers;
   }
 
   Widget _buildEmptyState() {
@@ -326,14 +378,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   }
 
   void _showMemberDetail(BuildContext context, FamilyTreeNode node) {
-    final genLevel = node.metadata?['generation'] as int? ?? 1;
-    final genLabel = genLevel == 0
-        ? 'Root'
-        : genLevel == 1
-            ? '1st Gen'
-            : genLevel == 2
-                ? '2nd Gen'
-                : '3rd Gen';
+    final genLabel = FamilyTreeNode.labelForGeneration(
+      FamilyTreeNode.generationFromMetadata(node.metadata),
+    );
 
     showModalBottomSheet(
       context: context,
@@ -365,24 +412,10 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
-                    // Avatar
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: const BoxDecoration(
-                        gradient: AppColors.primaryGradient,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          node.initials,
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
+                    MemberAvatar(
+                      node: node,
+                      size: 88,
+                      backgroundColor: Colors.white,
                     ),
                     const SizedBox(height: 16),
                     Text(
@@ -394,22 +427,21 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        genLabel,
-                        style: const TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        _MetaChip(
+                          icon: Icons.layers_outlined,
+                          label: genLabel,
                         ),
-                      ),
+                        if (node.gender != MemberGender.unspecified)
+                          _MetaChip(
+                            icon: genderIcon(node.gender),
+                            label: node.gender.label,
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     // Birth/Death info
@@ -522,9 +554,12 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
 
   void _showEditMemberDialog(BuildContext context, FamilyTreeNode node) {
     final nameController = TextEditingController(text: node.fullName);
+    final picker = ImagePicker();
     DateTime? birthDate = node.birthDate;
     DateTime? deathDate = node.deathDate;
-    int generation = node.metadata?['generation'] as int? ?? 1;
+    int generation = node.generation;
+    MemberGender gender = node.gender;
+    XFile? pickedPhoto;
 
     showModalBottomSheet(
       context: context,
@@ -542,8 +577,13 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
               topRight: Radius.circular(24),
             ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 24,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -567,7 +607,24 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                MemberPhotoPicker(
+                  pickedFile: pickedPhoto,
+                  existingPhotoUrl: node.displayPhotoUrl,
+                  onPickGallery: () async {
+                    final file = await picker.pickImage(
+                      source: ImageSource.gallery,
+                      maxWidth: 1200,
+                      maxHeight: 1200,
+                      imageQuality: 85,
+                    );
+                    if (file != null) setSheetState(() => pickedPhoto = file);
+                  },
+                  onClear: pickedPhoto != null
+                      ? () => setSheetState(() => pickedPhoto = null)
+                      : null,
+                ),
+                const SizedBox(height: 16),
                 TextField(
                   controller: nameController,
                   decoration: const InputDecoration(
@@ -576,7 +633,11 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Birth date
+                MemberGenderField(
+                  value: gender,
+                  onChanged: (g) => setSheetState(() => gender = g),
+                ),
+                const SizedBox(height: 16),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.cake_outlined),
@@ -630,7 +691,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                         fullName: nameController.text.trim(),
                         birthDate: birthDate,
                         deathDate: deathDate,
-                        metadata: {'generation': generation},
+                        generation: generation,
+                        gender: gender,
+                        photo: pickedPhoto,
                       );
                       if (mounted) {
                         if (success) {
@@ -658,8 +721,11 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
 
   void _showAddMemberDialog(BuildContext context) {
     final nameController = TextEditingController();
+    final picker = ImagePicker();
     DateTime? birthDate;
     int generation = 1;
+    MemberGender gender = MemberGender.unspecified;
+    XFile? pickedPhoto;
     bool saving = false;
 
     showModalBottomSheet(
@@ -678,13 +744,17 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
               topRight: Radius.circular(24),
             ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 24,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Handle bar
                 Center(
                   child: Container(
                     width: 40,
@@ -704,7 +774,23 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                MemberPhotoPicker(
+                  pickedFile: pickedPhoto,
+                  onPickGallery: () async {
+                    final file = await picker.pickImage(
+                      source: ImageSource.gallery,
+                      maxWidth: 1200,
+                      maxHeight: 1200,
+                      imageQuality: 85,
+                    );
+                    if (file != null) setSheetState(() => pickedPhoto = file);
+                  },
+                  onClear: pickedPhoto != null
+                      ? () => setSheetState(() => pickedPhoto = null)
+                      : null,
+                ),
+                const SizedBox(height: 16),
                 TextField(
                   controller: nameController,
                   decoration: const InputDecoration(
@@ -714,7 +800,11 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                   textCapitalization: TextCapitalization.words,
                 ),
                 const SizedBox(height: 16),
-                // Birth date
+                MemberGenderField(
+                  value: gender,
+                  onChanged: (g) => setSheetState(() => gender = g),
+                ),
+                const SizedBox(height: 16),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.cake_outlined),
@@ -776,7 +866,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                             final node = await familyProvider.addFamilyMember(
                               fullName: nameController.text.trim(),
                               birthDate: birthDate,
-                              metadata: {'generation': generation},
+                              generation: generation,
+                              gender: gender,
+                              photo: pickedPhoto,
                             );
                             if (ctx.mounted) {
                               Navigator.pop(ctx);
@@ -812,118 +904,183 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   }
 }
 
+class _GenerationSectionHeader extends StatelessWidget {
+  final int level;
+  final int count;
+
+  const _GenerationSectionHeader({
+    required this.level,
+    required this.count,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              FamilyTreeNode.labelForGeneration(level),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '$count member${count == 1 ? '' : 's'}',
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetaChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _MetaChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: AppColors.primary),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MemberCard extends StatelessWidget {
-  final String name;
-  final String generation;
-  final String initial;
+  final FamilyTreeNode node;
   final bool isFavorite;
-  final DateTime? birthDate;
   final VoidCallback onTap;
   final VoidCallback onFavoriteToggle;
 
   const _MemberCard({
-    required this.name,
-    required this.generation,
-    required this.initial,
+    required this.node,
     required this.isFavorite,
-    this.birthDate,
     required this.onTap,
     required this.onFavoriteToggle,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: AppColors.primaryGradient,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withOpacity(0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            // Main content
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Avatar circle
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Text(
-                        initial,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Name
-                  Text(
-                    name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  // Generation and birth year
-                  Text(
-                    birthDate != null
-                        ? '$generation • ${birthDate!.year}'
-                        : generation,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withOpacity(0.8),
-                    ),
-                  ),
-                ],
+    final genLabel = FamilyTreeNode.labelForGeneration(node.generation);
+    final gender = node.gender;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: AppColors.primaryGradient,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
               ),
-            ),
-            // Favorite icon
-            Positioned(
-              top: 8,
-              right: 8,
-              child: GestureDetector(
-                onTap: onFavoriteToggle,
-                child: Icon(
-                  isFavorite ? Icons.favorite : Icons.favorite_border,
-                  color: isFavorite
-                      ? Colors.pinkAccent
-                      : Colors.white.withOpacity(0.6),
-                  size: 22,
+            ],
+          ),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    MemberAvatar(node: node, size: 56),
+                    const SizedBox(height: 10),
+                    Text(
+                      node.fullName,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      node.birthDate != null
+                          ? '$genLabel • ${node.birthDate!.year}'
+                          : genLabel,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.white.withOpacity(0.85),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+              if (gender != MemberGender.unspecified)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.45),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      genderIcon(gender),
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              Positioned(
+                top: 6,
+                right: 6,
+                child: GestureDetector(
+                  onTap: onFavoriteToggle,
+                  child: Icon(
+                    isFavorite ? Icons.favorite : Icons.favorite_border,
+                    color: isFavorite
+                        ? AppColors.textOnPrimary
+                        : Colors.white.withOpacity(0.7),
+                    size: 20,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

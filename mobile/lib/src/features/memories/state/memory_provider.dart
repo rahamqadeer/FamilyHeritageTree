@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/models/memory.dart';
 import '../../../core/services/service_locator.dart';
 
@@ -57,7 +57,7 @@ class MemoryProvider extends ChangeNotifier {
     required String familyId,
     required String title,
     String? description,
-    required File file,
+    required XFile file,
     required MediaType mediaType,
     String? event,
     DateTime? eventDate,
@@ -90,7 +90,8 @@ class MemoryProvider extends ChangeNotifier {
       );
 
       _memories.insert(0, memory);
-      notifyListeners();
+      // Refresh list so gallery gets signed media_url for thumbnails.
+      await loadMemories(familyId);
       return memory;
     } catch (e) {
       _error = 'Failed to upload memory: ${e.toString()}';

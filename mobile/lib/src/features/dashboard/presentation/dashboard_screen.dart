@@ -8,7 +8,17 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 class DashboardScreen extends StatelessWidget {
-  const DashboardScreen({super.key});
+  /// Switches the main bottom-nav tab (0=Home, 1=Tree, 2=Memories, 3=Profile).
+  final void Function(int tabIndex)? onSwitchTab;
+
+  /// Opens the add-memory upload flow.
+  final VoidCallback? onOpenUpload;
+
+  const DashboardScreen({
+    super.key,
+    this.onSwitchTab,
+    this.onOpenUpload,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -133,7 +143,7 @@ class DashboardScreen extends StatelessWidget {
                           _StatCard(
                             value: memberCount.toString(),
                             label: 'Members',
-                            color: AppColors.gradientStart,
+                            color: AppColors.primaryLight,
                           ),
                           const SizedBox(width: 12),
                           _StatCard(
@@ -173,34 +183,34 @@ class DashboardScreen extends StatelessWidget {
                         icon: Icons.account_tree,
                         label: 'Tree',
                         color: AppColors.primary,
-                        onTap: () {
-                          // Navigate to tree tab (index 1)
-                        },
+                        onTap: () => onSwitchTab?.call(1),
                       ),
                       _QuickActionCard(
                         icon: Icons.add,
                         label: 'Add',
                         color: AppColors.primaryLight,
                         onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const MemoryUploadScreen(),
-                            ),
-                          );
+                          if (onOpenUpload != null) {
+                            onOpenUpload!();
+                          } else {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const MemoryUploadScreen(),
+                              ),
+                            );
+                          }
                         },
                       ),
                       _QuickActionCard(
                         icon: Icons.photo_library,
                         label: 'Gallery',
-                        color: AppColors.gradientStart,
-                        onTap: () {
-                          // Navigate to gallery tab (index 2)
-                        },
+                        color: AppColors.accent,
+                        onTap: () => onSwitchTab?.call(2),
                       ),
                       _QuickActionCard(
                         icon: Icons.person_add,
                         label: 'Invite',
-                        color: AppColors.accent,
+                        color: AppColors.accentLight,
                         onTap: () => _showInviteDialog(context),
                       ),
                     ],
@@ -228,9 +238,7 @@ class DashboardScreen extends StatelessWidget {
                         ),
                       ),
                       TextButton(
-                        onPressed: () {
-                          // Navigate to memories
-                        },
+                        onPressed: () => onSwitchTab?.call(2),
                         child: const Text('See All'),
                       ),
                     ],
@@ -485,44 +493,49 @@ class _QuickActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 75,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 45,
-              height: 45,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          width: 75,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.divider),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
               ),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 45,
+                height: 45,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 24),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

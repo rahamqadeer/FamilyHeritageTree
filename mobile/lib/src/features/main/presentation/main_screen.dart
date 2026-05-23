@@ -4,6 +4,7 @@ import 'package:family_digital_heritage_vault/src/features/family/presentation/f
 import 'package:family_digital_heritage_vault/src/features/family/state/family_provider.dart';
 import 'package:family_digital_heritage_vault/src/features/family_tree/presentation/family_tree_screen.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/presentation/memory_gallery_screen.dart';
+import 'package:family_digital_heritage_vault/src/features/memories/presentation/memory_upload_screen.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/state/memory_provider.dart';
 import 'package:family_digital_heritage_vault/src/features/profile/presentation/profile_screen.dart';
 import 'package:flutter/material.dart';
@@ -20,12 +21,9 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   bool _initialized = false;
 
-  final List<Widget> _screens = const [
-    DashboardScreen(),
-    FamilyTreeScreen(),
-    MemoryGalleryScreen(),
-    ProfileScreen(),
-  ];
+  void _switchTab(int index) {
+    setState(() => _currentIndex = index);
+  }
 
   @override
   void initState() {
@@ -66,10 +64,32 @@ class _MainScreenState extends State<MainScreen> {
           return const FamilySetupScreen();
         }
 
+        final screens = <Widget>[
+          DashboardScreen(
+            onSwitchTab: _switchTab,
+            onOpenUpload: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const MemoryUploadScreen(),
+                ),
+              );
+            },
+          ),
+          const FamilyTreeScreen(),
+          const MemoryGalleryScreen(),
+          const ProfileScreen(),
+        ];
+
         return Scaffold(
           body: IndexedStack(
             index: _currentIndex,
-            children: _screens,
+            sizing: StackFit.expand,
+            children: List.generate(screens.length, (index) {
+              return IgnorePointer(
+                ignoring: _currentIndex != index,
+                child: screens[index],
+              );
+            }),
           ),
           bottomNavigationBar: Container(
             decoration: BoxDecoration(

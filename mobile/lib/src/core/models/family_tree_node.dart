@@ -1,3 +1,52 @@
+/// Gender stored in node metadata.
+enum MemberGender {
+  male,
+  female,
+  other,
+  unspecified;
+
+  String get value {
+    switch (this) {
+      case MemberGender.male:
+        return 'male';
+      case MemberGender.female:
+        return 'female';
+      case MemberGender.other:
+        return 'other';
+      case MemberGender.unspecified:
+        return 'unspecified';
+    }
+  }
+
+  static MemberGender fromString(String? raw) {
+    switch (raw?.toLowerCase()) {
+      case 'male':
+      case 'm':
+        return MemberGender.male;
+      case 'female':
+      case 'f':
+        return MemberGender.female;
+      case 'other':
+        return MemberGender.other;
+      default:
+        return MemberGender.unspecified;
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case MemberGender.male:
+        return 'Male';
+      case MemberGender.female:
+        return 'Female';
+      case MemberGender.other:
+        return 'Other';
+      case MemberGender.unspecified:
+        return 'Not specified';
+    }
+  }
+}
+
 class FamilyTreeNode {
   final String id;
   final String familyId;
@@ -6,6 +55,7 @@ class FamilyTreeNode {
   final DateTime? deathDate;
   final String? userId;
   final Map<String, dynamic>? metadata;
+  final String? photoUrl;
   final DateTime createdAt;
 
   FamilyTreeNode({
@@ -16,8 +66,74 @@ class FamilyTreeNode {
     this.deathDate,
     this.userId,
     this.metadata,
+    this.photoUrl,
     required this.createdAt,
   });
+
+  /// Generation level from metadata (defaults to 1).
+  static int generationFromMetadata(Map<String, dynamic>? metadata) {
+    if (metadata == null) return 1;
+    final value = metadata['generation'];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return 1;
+  }
+
+  int get generation => generationFromMetadata(metadata);
+
+  MemberGender get gender => MemberGender.fromString(
+        metadata?['gender'] as String?,
+      );
+
+  /// Signed URL for profile photo (from API `photo_url`).
+  String? get displayPhotoUrl {
+    if (photoUrl != null && photoUrl!.isNotEmpty) return photoUrl;
+    final path = metadata?['photoPath'] as String?;
+    if (path != null && path.startsWith('http')) return path;
+    return null;
+  }
+
+  /// Chip label shown in the family tree generation filter row.
+  static const List<String> generationFilterChips = [
+    'All',
+    'Root Gen',
+    '1st Gen',
+    '2nd Gen',
+    '3rd Gen',
+  ];
+
+  /// Maps a filter chip label to a metadata generation level (`null` = show all).
+  static int? filterLevelForChip(String chipLabel) {
+    switch (chipLabel) {
+      case 'All':
+        return null;
+      case 'Root Gen':
+        return 0;
+      case '1st Gen':
+        return 1;
+      case '2nd Gen':
+        return 2;
+      case '3rd Gen':
+        return 3;
+      default:
+        return null;
+    }
+  }
+
+  static String labelForGeneration(int level) {
+    switch (level) {
+      case 0:
+        return 'Root Gen';
+      case 1:
+        return '1st Gen';
+      case 2:
+        return '2nd Gen';
+      case 3:
+        return '3rd Gen';
+      default:
+        return 'Gen $level';
+    }
+  }
 
   factory FamilyTreeNode.fromJson(Map<String, dynamic> json) {
     return FamilyTreeNode(
@@ -31,9 +147,19 @@ class FamilyTreeNode {
           ? DateTime.parse(json['death_date'] as String)
           : null,
       userId: json['user_id'] as String?,
-      metadata: json['metadata'] as Map<String, dynamic>?,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      metadata: _parseMetadata(json['metadata']),
+      photoUrl: json['photo_url'] as String?,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String)
+          : DateTime.now(),
     );
+  }
+
+  static Map<String, dynamic>? _parseMetadata(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return null;
   }
 
   Map<String, dynamic> toJson() => {
@@ -117,7 +243,9 @@ class FamilyRelationship {
       fromNodeId: json['from_node_id'] as String,
       toNodeId: json['to_node_id'] as String,
       type: RelationshipType.fromString(json['type'] as String),
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String)
+          : DateTime.now(),
     );
   }
 

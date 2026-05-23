@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS family_tree_nodes (
   full_name text NOT NULL,
   birth_date date,
   death_date date,
-  metadata jsonb DEFAULT '{}'::jsonb
+  metadata jsonb DEFAULT '{}'::jsonb,
+  created_at timestamptz DEFAULT now()
 );
 
 CREATE TYPE relationship_type AS ENUM ('PARENT', 'CHILD', 'SPOUSE');
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS family_relationships (
   from_node_id uuid NOT NULL REFERENCES family_tree_nodes(id) ON DELETE CASCADE,
   to_node_id uuid NOT NULL REFERENCES family_tree_nodes(id) ON DELETE CASCADE,
   type relationship_type NOT NULL,
+  created_at timestamptz DEFAULT now(),
   CONSTRAINT no_self_relationship CHECK (from_node_id <> to_node_id)
 );
 

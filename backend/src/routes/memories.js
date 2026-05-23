@@ -1,11 +1,123 @@
 import express from 'express'
+import multer from 'multer'
 import { supabaseAdmin } from '../config/supabaseClient.js'
 import { requireFamilyRole } from '../middlewares/roleMiddleware.js'
 import { enforceInheritanceRules } from '../middlewares/inheritanceMiddleware.js'
 
 const router = express.Router()
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }
+})
 
-// Create memory metadata (actual media is uploaded to Firebase Storage from the client)
+function normalizeMediaType (mediaType) {
+  const upper = String(mediaType || '').toUpperCase()
+  if (upper === 'IMAGE' || upper === 'PHOTO') return 'photo'
+  if (upper === 'VIDEO') return 'video'
+  if (upper === 'AUDIO') return 'audio'
+  if (upper === 'DOCUMENT' || upper === 'TEXT') return 'text'
+  return 'photo'
+}
+
+const MEMORY_BUCKET = 'memories'
+const SIGNED_URL_TTL_SEC = 60 * 60
+
+/** Object path inside the `memories` bucket (not the public HTTP URL). */
+function extractStorageObjectPath (storagePath) {
+  if (!storagePath || typeof storagePath !== 'string') return null
+  const trimmed = storagePath.trim()
+  if (!trimmed.startsWith('http')) return trimmed
+
+  const publicMatch = trimmed.match(/\/object\/public\/memories\/(.+?)(?:\?|$)/)
+  if (publicMatch) return decodeURIComponent(publicMatch[1])
+
+  const signedMatch = trimmed.match(/\/object\/sign\/memories\/(.+?)(?:\?|$)/)
+  if (signedMatch) return decodeURIComponent(signedMatch[1])
+
+  return trimmed
+}
+
+async function resolveMemoryMediaUrl (storagePath) {
+  const objectPath = extractStorageObjectPath(storagePath)
+  if (!objectPath) return null
+
+  const { data, error } = await supabaseAdmin.storage
+    .from(MEMORY_BUCKET)
+    .createSignedUrl(objectPath, SIGNED_URL_TTL_SEC)
+
+  if (!error && data?.signedUrl) {
+    return data.signedUrl
+  }
+
+  console.error('Signed URL error', error)
+  const { data: pub } = supabaseAdmin.storage
+    .from(MEMORY_BUCKET)
+    .getPublicUrl(objectPath)
+  return pub.publicUrl
+}
+
+async function serializeMemory (row) {
+  if (!row) return row
+  const mediaUrl = row.storage_path
+    ? await resolveMemoryMediaUrl(row.storage_path)
+    : null
+  return {
+    ...row,
+    created_at: row.created_at ?? new Date().toISOString(),
+    media_url: mediaUrl
+  }
+}
+
+// Upload media file to Supabase Storage (service role — works on web & mobile)
+router.post(
+  '/upload-media',
+  upload.single('file'),
+  requireFamilyRole(['ADMIN', 'ADULT']),
+  async (req, res) => {
+    try {
+      const familyId = req.body.familyId || req.params.familyId
+      const file = req.file
+
+      if (!familyId) {
+        return res.status(400).json({ message: 'familyId is required' })
+      }
+      if (!file) {
+        return res.status(400).json({ message: 'file is required' })
+      }
+
+      const safeName = (file.originalname || 'upload.bin').replace(/[^a-zA-Z0-9._-]/g, '_')
+      const storagePath = `memories/${familyId}/${Date.now()}_${safeName}`
+
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from('memories')
+        .upload(storagePath, file.buffer, {
+          contentType: file.mimetype || 'application/octet-stream',
+          upsert: false
+        })
+
+      if (uploadError) {
+        console.error('Storage upload error', uploadError)
+        return res.status(500).json({
+          message: uploadError.message || 'Failed to upload file to storage'
+        })
+      }
+
+      const { data: publicData } = supabaseAdmin.storage
+        .from('memories')
+        .getPublicUrl(storagePath)
+
+      res.status(201).json({
+        storagePath,
+        publicUrl: publicData.publicUrl
+      })
+    } catch (err) {
+      console.error('Upload media error', err)
+      res.status(500).json({ message: 'Failed to upload media' })
+    }
+  }
+)
+
+// Create memory metadata after media is uploaded
 router.post('/', requireFamilyRole(['ADMIN', 'ADULT']), async (req, res) => {
   try {
     const {
@@ -31,7 +143,7 @@ router.post('/', requireFamilyRole(['ADMIN', 'ADULT']), async (req, res) => {
         created_by: req.auth.user.id,
         title,
         description,
-        media_type: mediaType,
+        media_type: normalizeMediaType(mediaType),
         storage_path: storagePath,
         event,
         event_date: eventDate,
@@ -60,7 +172,7 @@ router.post('/', requireFamilyRole(['ADMIN', 'ADULT']), async (req, res) => {
       }
     }
 
-    res.status(201).json(memory)
+    res.status(201).json(await serializeMemory(memory))
   } catch (err) {
     console.error('Create memory error', err)
     res.status(500).json({ message: 'Failed to create memory' })
@@ -86,7 +198,8 @@ router.get('/', requireFamilyRole(['ADMIN', 'ADULT', 'JUNIOR']), async (req, res
       return res.status(500).json({ message: 'Failed to list memories' })
     }
 
-    res.json(data)
+    const memories = await Promise.all((data ?? []).map(serializeMemory))
+    res.json(memories)
   } catch (err) {
     console.error('List memories error', err)
     res.status(500).json({ message: 'Failed to list memories' })
@@ -108,7 +221,7 @@ router.get('/:memoryId', requireFamilyRole(['ADMIN', 'ADULT', 'JUNIOR']), enforc
       return res.status(404).json({ message: 'Memory not found' })
     }
 
-    res.json(memory)
+    res.json(await serializeMemory(memory))
   } catch (err) {
     console.error('Get memory error', err)
     res.status(500).json({ message: 'Failed to load memory' })

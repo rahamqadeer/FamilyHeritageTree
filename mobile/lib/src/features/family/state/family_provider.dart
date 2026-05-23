@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/models/family.dart';
 import '../../../core/models/family_tree_node.dart';
 import '../../../core/services/service_locator.dart';
@@ -106,6 +107,9 @@ class FamilyProvider extends ChangeNotifier {
     required String fullName,
     DateTime? birthDate,
     DateTime? deathDate,
+    int generation = 1,
+    MemberGender gender = MemberGender.unspecified,
+    XFile? photo,
     Map<String, dynamic>? metadata,
   }) async {
     if (_selectedFamily == null) return null;
@@ -115,14 +119,42 @@ class FamilyProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final node = await services.familyTreeService.createOrUpdateNode(
+      final mergedMetadata = <String, dynamic>{
+        'generation': generation,
+        'gender': gender.value,
+        ...?metadata,
+      };
+
+      var node = await services.familyTreeService.createOrUpdateNode(
         familyId: _selectedFamily!.id,
         fullName: fullName,
         birthDate: birthDate,
         deathDate: deathDate,
-        metadata: metadata,
+        metadata: mergedMetadata,
       );
-      await loadFamilyTree();
+
+      if (photo != null) {
+        node = await services.familyTreeService.uploadMemberPhoto(
+          familyId: _selectedFamily!.id,
+          nodeId: node.id,
+          file: photo,
+        );
+      }
+      try {
+        await loadFamilyTree();
+      } catch (reloadError) {
+        // Member was saved; merge into local tree if reload fails.
+        final tree = _familyTree;
+        if (tree != null && !tree.nodes.any((n) => n.id == node.id)) {
+          _familyTree = FamilyTree(
+            nodes: [...tree.nodes, node],
+            relationships: tree.relationships,
+          );
+        } else if (tree == null) {
+          _familyTree = FamilyTree(nodes: [node], relationships: []);
+        }
+        _error = 'Member added but tree refresh failed: $reloadError';
+      }
       return node;
     } catch (e) {
       _error = 'Failed to add family member: ${e.toString()}';
@@ -138,6 +170,9 @@ class FamilyProvider extends ChangeNotifier {
     required String fullName,
     DateTime? birthDate,
     DateTime? deathDate,
+    int? generation,
+    MemberGender? gender,
+    XFile? photo,
     Map<String, dynamic>? metadata,
   }) async {
     if (_selectedFamily == null) return false;
@@ -147,14 +182,31 @@ class FamilyProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final existing = _familyTree?.getNodeById(nodeId);
+      final mergedMetadata = <String, dynamic>{
+        ...?existing?.metadata,
+        ...?metadata,
+        if (generation != null) 'generation': generation,
+        if (gender != null) 'gender': gender.value,
+      };
+
       await services.familyTreeService.createOrUpdateNode(
         familyId: _selectedFamily!.id,
         id: nodeId,
         fullName: fullName,
         birthDate: birthDate,
         deathDate: deathDate,
-        metadata: metadata,
+        metadata: mergedMetadata,
       );
+
+      if (photo != null) {
+        await services.familyTreeService.uploadMemberPhoto(
+          familyId: _selectedFamily!.id,
+          nodeId: nodeId,
+          file: photo,
+        );
+      }
+
       await loadFamilyTree();
       return true;
     } catch (e) {

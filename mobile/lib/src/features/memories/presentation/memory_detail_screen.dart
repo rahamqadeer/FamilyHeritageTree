@@ -1,14 +1,61 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:family_digital_heritage_vault/src/core/models/memory.dart';
+import 'package:family_digital_heritage_vault/src/core/services/service_locator.dart';
 import 'package:family_digital_heritage_vault/src/core/theme/app_theme.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/presentation/inheritance_rule_screen.dart';
+import 'package:family_digital_heritage_vault/src/features/memories/presentation/memory_photo_viewer_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-class MemoryDetailScreen extends StatelessWidget {
+class MemoryDetailScreen extends StatefulWidget {
   final Memory memory;
 
   const MemoryDetailScreen({super.key, required this.memory});
+
+  @override
+  State<MemoryDetailScreen> createState() => _MemoryDetailScreenState();
+}
+
+class _MemoryDetailScreenState extends State<MemoryDetailScreen> {
+  late Memory _memory;
+  bool _loadingMedia = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _memory = widget.memory;
+    _refreshMemory();
+  }
+
+  Future<void> _refreshMemory() async {
+    setState(() => _loadingMedia = true);
+    try {
+      final fresh = await services.memoryService.getMemory(widget.memory.id);
+      if (mounted) {
+        setState(() {
+          _memory = fresh;
+          _loadingMedia = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _loadingMedia = false);
+      }
+    }
+  }
+
+  void _openPhotoViewer() {
+    final url = _memory.displayUrl;
+    if (url == null || _memory.mediaType != MediaType.image) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MemoryPhotoViewerScreen(
+          imageUrl: url,
+          title: _memory.title,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,34 +63,62 @@ class MemoryDetailScreen extends StatelessWidget {
       backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
-          // App bar with image
           SliverAppBar(
             expandedHeight: 300,
             pinned: true,
             backgroundColor: AppColors.primary,
             iconTheme: const IconThemeData(color: Colors.white),
             flexibleSpace: FlexibleSpaceBar(
-              background: _buildMediaPreview(),
+              background: GestureDetector(
+                onTap: _memory.mediaType == MediaType.image && _memory.displayUrl != null
+                    ? _openPhotoViewer
+                    : null,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _buildMediaPreview(),
+                    if (_memory.mediaType == MediaType.image && _memory.displayUrl != null)
+                      Positioned(
+                        right: 12,
+                        bottom: 12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.fullscreen, color: Colors.white, size: 18),
+                              SizedBox(width: 4),
+                              Text(
+                                'Tap to enlarge',
+                                style: TextStyle(color: Colors.white, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
             actions: [
               IconButton(
-                onPressed: () {
-                  _showOptionsMenu(context);
-                },
+                onPressed: () => _showOptionsMenu(context),
                 icon: const Icon(Icons.more_vert),
               ),
             ],
           ),
-          // Content
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Title
                   Text(
-                    memory.title,
+                    _memory.title,
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -51,25 +126,23 @@ class MemoryDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // Meta info row
                   Row(
                     children: [
                       _MetaChip(
-                        icon: _getMediaIcon(memory.mediaType),
-                        label: memory.mediaType.displayName,
+                        icon: _getMediaIcon(_memory.mediaType),
+                        label: _memory.mediaType.displayName,
                         color: AppColors.primary,
                       ),
                       const SizedBox(width: 8),
                       _MetaChip(
                         icon: Icons.calendar_today,
-                        label: DateFormat.yMMMd().format(memory.createdAt),
+                        label: DateFormat.yMMMd().format(_memory.createdAt),
                         color: AppColors.textSecondary,
                       ),
                     ],
                   ),
                   const SizedBox(height: 20),
-                  // Description
-                  if (memory.description != null) ...[
+                  if (_memory.description != null) ...[
                     const Text(
                       'Description',
                       style: TextStyle(
@@ -80,7 +153,7 @@ class MemoryDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      memory.description!,
+                      _memory.description!,
                       style: const TextStyle(
                         fontSize: 15,
                         color: AppColors.textSecondary,
@@ -89,8 +162,7 @@ class MemoryDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
                   ],
-                  // Event info
-                  if (memory.event != null || memory.eventDate != null) ...[
+                  if (_memory.event != null || _memory.eventDate != null) ...[
                     const Text(
                       'Event Details',
                       style: TextStyle(
@@ -115,27 +187,24 @@ class MemoryDetailScreen extends StatelessWidget {
                       ),
                       child: Column(
                         children: [
-                          if (memory.event != null)
+                          if (_memory.event != null)
                             _InfoRow(
                               icon: Icons.event,
                               label: 'Event',
-                              value: memory.event!,
+                              value: _memory.event!,
                             ),
-                          if (memory.event != null && memory.eventDate != null)
-                            const Divider(height: 24),
-                          if (memory.eventDate != null)
+                          if (_memory.eventDate != null)
                             _InfoRow(
-                              icon: Icons.calendar_month,
+                              icon: Icons.calendar_today,
                               label: 'Date',
-                              value: DateFormat.yMMMMd().format(memory.eventDate!),
+                              value: DateFormat.yMMMd().format(_memory.eventDate!),
                             ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 20),
                   ],
-                  // Tags
-                  if (memory.tags != null && memory.tags!.isNotEmpty) ...[
+                  if (_memory.tags != null && _memory.tags!.isNotEmpty) ...[
                     const Text(
                       'Tags',
                       style: TextStyle(
@@ -144,15 +213,22 @@ class MemoryDetailScreen extends StatelessWidget {
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: memory.tags!.map((tag) => _TagChip(tag: tag)).toList(),
+                      children: _memory.tags!
+                          .map(
+                            (tag) => Chip(
+                              label: Text(tag),
+                              backgroundColor: AppColors.primary.withOpacity(0.1),
+                              labelStyle: const TextStyle(color: AppColors.primary),
+                            ),
+                          )
+                          .toList(),
                     ),
                     const SizedBox(height: 20),
                   ],
-                  // Inheritance Rules Section
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -161,73 +237,59 @@ class MemoryDetailScreen extends StatelessWidget {
                           AppColors.primary.withOpacity(0.1),
                           AppColors.gradientEnd.withOpacity(0.1),
                         ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
                       ),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: AppColors.primary.withOpacity(0.2)),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(
-                                Icons.lock_clock,
-                                color: AppColors.primary,
-                                size: 24,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Inheritance Rules',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Control when this memory is shared',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => InheritanceRuleScreen(memory: memory),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Inheritance Rule'),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              side: const BorderSide(color: AppColors.primary),
-                            ),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
                           ),
+                          child: const Icon(
+                            Icons.lock_clock,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Inheritance Rules',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Control when this memory becomes visible',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        OutlinedButton(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => InheritanceRuleScreen(memory: _memory),
+                              ),
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.primary),
+                          ),
+                          child: const Text('Set Rules'),
                         ),
                       ],
                     ),
@@ -243,12 +305,19 @@ class MemoryDetailScreen extends StatelessWidget {
   }
 
   Widget _buildMediaPreview() {
-    if (memory.storagePath == null) {
+    if (_loadingMedia) {
+      return Container(
+        color: AppColors.primary.withOpacity(0.1),
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_memory.displayUrl == null) {
       return Container(
         color: AppColors.primary.withOpacity(0.1),
         child: Center(
           child: Icon(
-            _getMediaIcon(memory.mediaType),
+            _getMediaIcon(_memory.mediaType),
             size: 64,
             color: AppColors.primary.withOpacity(0.5),
           ),
@@ -256,9 +325,9 @@ class MemoryDetailScreen extends StatelessWidget {
       );
     }
 
-    if (memory.mediaType == MediaType.image) {
+    if (_memory.mediaType == MediaType.image) {
       return CachedNetworkImage(
-        imageUrl: memory.storagePath!,
+        imageUrl: _memory.displayUrl!,
         fit: BoxFit.cover,
         placeholder: (context, url) => Container(
           color: AppColors.primary.withOpacity(0.1),
@@ -280,13 +349,13 @@ class MemoryDetailScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              _getMediaIcon(memory.mediaType),
+              _getMediaIcon(_memory.mediaType),
               size: 64,
               color: AppColors.primary,
             ),
             const SizedBox(height: 8),
             Text(
-              memory.mediaType.displayName,
+              _memory.mediaType.displayName,
               style: const TextStyle(
                 color: AppColors.primary,
                 fontWeight: FontWeight.w500,
@@ -317,12 +386,12 @@ class MemoryDetailScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => SafeArea(
+      builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 8),
             Container(
+              margin: const EdgeInsets.only(top: 12),
               width: 40,
               height: 4,
               decoration: BoxDecoration(
@@ -330,68 +399,37 @@ class MemoryDetailScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(height: 16),
+            if (_memory.mediaType == MediaType.image && _memory.displayUrl != null)
+              ListTile(
+                leading: const Icon(Icons.fullscreen, color: AppColors.primary),
+                title: const Text('View full image'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openPhotoViewer();
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.share, color: AppColors.primary),
               title: const Text('Share'),
-              onTap: () {
-                Navigator.pop(context);
-                // TODO: Implement share
-              },
+              onTap: () => Navigator.pop(ctx),
             ),
             ListTile(
               leading: const Icon(Icons.download, color: AppColors.primary),
               title: const Text('Download'),
-              onTap: () {
-                Navigator.pop(context);
-                // TODO: Implement download
-              },
+              onTap: () => Navigator.pop(ctx),
             ),
             ListTile(
               leading: const Icon(Icons.edit, color: AppColors.primary),
               title: const Text('Edit'),
-              onTap: () {
-                Navigator.pop(context);
-                // TODO: Implement edit
-              },
+              onTap: () => Navigator.pop(ctx),
             ),
-            const Divider(),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: AppColors.error),
               title: const Text('Delete', style: TextStyle(color: AppColors.error)),
-              onTap: () {
-                Navigator.pop(context);
-                _confirmDelete(context);
-              },
+              onTap: () => Navigator.pop(ctx),
             ),
-            const SizedBox(height: 16),
           ],
         ),
-      ),
-    );
-  }
-
-  void _confirmDelete(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Memory'),
-        content: const Text('Are you sure you want to delete this memory? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-              // TODO: Actually delete the memory
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Delete'),
-          ),
-        ],
       ),
     );
   }
@@ -411,7 +449,7 @@ class _MetaChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
@@ -419,12 +457,12 @@ class _MetaChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: color),
+          Icon(icon, size: 14, color: color),
           const SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 12,
               color: color,
               fontWeight: FontWeight.w500,
             ),
@@ -448,53 +486,28 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 20, color: AppColors.textSecondary),
-        const SizedBox(width: 12),
-        Text(
-          '$label:',
-          style: const TextStyle(
-            fontSize: 14,
-            color: AppColors.textSecondary,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            value,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: AppColors.textSecondary),
+          const SizedBox(width: 12),
+          Text(
+            '$label: ',
             style: const TextStyle(
-              fontSize: 14,
               fontWeight: FontWeight.w500,
-              color: AppColors.textPrimary,
+              color: AppColors.textSecondary,
             ),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TagChip extends StatelessWidget {
-  final String tag;
-
-  const _TagChip({required this.tag});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.accent.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Text(
-        '#$tag',
-        style: const TextStyle(
-          fontSize: 13,
-          color: AppColors.accent,
-          fontWeight: FontWeight.w500,
-        ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

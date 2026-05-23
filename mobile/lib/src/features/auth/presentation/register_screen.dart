@@ -79,7 +79,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         width: 70,
                         height: 70,
                         decoration: BoxDecoration(
-                          color: AppColors.accent,
+                          color: AppColors.primaryLight,
                           borderRadius: BorderRadius.circular(18),
                           boxShadow: [
                             BoxShadow(

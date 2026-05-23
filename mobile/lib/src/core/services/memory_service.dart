@@ -1,5 +1,10 @@
-import 'dart:io';
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../config/app_config.dart';
 import '../models/memory.dart';
 import 'api_client.dart';
 
@@ -67,22 +72,64 @@ class MemoryService {
     return InheritanceRule.fromJson(response as Map<String, dynamic>);
   }
 
+  /// Uploads via backend (Supabase service role). Works on web, mobile, and desktop.
   Future<String> uploadMedia({
     required String familyId,
-    required File file,
+    required XFile file,
     required MediaType mediaType,
   }) async {
-    final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.path.split('/').last}';
-    final storagePath = 'memories/$familyId/$fileName';
+    final token = _supabase.auth.currentSession?.accessToken;
+    if (token == null) {
+      throw Exception('Not authenticated');
+    }
 
-    await _supabase.storage
-        .from('memories')
-        .upload(storagePath, file);
+    final bytes = await file.readAsBytes();
+    final fileName = _resolveFileName(file, mediaType);
 
-    final publicUrl = _supabase.storage
-        .from('memories')
-        .getPublicUrl(storagePath);
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${AppConfig.apiBaseUrl}/api/memories/upload-media'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields['familyId'] = familyId;
+    request.fields['mediaType'] = mediaType.value;
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: fileName,
+      ),
+    );
 
-    return publicUrl;
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String message = 'Upload failed';
+      try {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        message = body['message'] as String? ?? message;
+      } catch (_) {}
+      throw ApiException(message, response.statusCode);
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    // Store object path in DB; API resolves signed URLs when listing/viewing.
+    return data['storagePath'] as String;
   }
+
+  String _resolveFileName(XFile file, MediaType mediaType) {
+    if (file.name.isNotEmpty) return file.name;
+    switch (mediaType) {
+      case MediaType.video:
+        return 'video_${DateTime.now().millisecondsSinceEpoch}.mp4';
+      case MediaType.audio:
+        return 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      case MediaType.document:
+        return 'document_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      case MediaType.image:
+        return 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    }
+  }
+
 }

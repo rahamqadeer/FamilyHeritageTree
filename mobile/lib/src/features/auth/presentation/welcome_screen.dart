@@ -61,12 +61,13 @@ class WelcomeScreen extends StatelessWidget {
                       // Placeholder gradient background
                       Container(
                         decoration: BoxDecoration(
+                          color: AppColors.divider,
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              AppColors.gradientStart.withOpacity(0.3),
-                              AppColors.gradientEnd.withOpacity(0.3),
+                              AppColors.primary.withOpacity(0.08),
+                              AppColors.primaryLight.withOpacity(0.15),
                             ],
                           ),
                         ),

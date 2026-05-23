@@ -1,8 +1,104 @@
 import express from 'express'
+import multer from 'multer'
 import { supabaseAdmin } from '../config/supabaseClient.js'
 import { requireFamilyRole } from '../middlewares/roleMiddleware.js'
+import { resolveStorageMediaUrl, STORAGE_BUCKET } from '../utils/storageMedia.js'
 
 const router = express.Router()
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }
+})
+
+async function serializeNode (row) {
+  if (!row) return row
+  const metadata = row.metadata ?? {}
+  const photoPath = metadata.photoPath || metadata.photo_path
+  const photoUrl = photoPath ? await resolveStorageMediaUrl(photoPath) : null
+  return {
+    ...row,
+    metadata,
+    created_at: row.created_at ?? new Date().toISOString(),
+    photo_url: photoUrl
+  }
+}
+
+function serializeRelationship (row) {
+  if (!row) return row
+  return {
+    ...row,
+    created_at: row.created_at ?? new Date().toISOString()
+  }
+}
+
+// Upload member profile photo (after node is created)
+router.post(
+  '/:familyId/nodes/:nodeId/photo',
+  upload.single('file'),
+  requireFamilyRole(['ADMIN', 'ADULT']),
+  async (req, res) => {
+    try {
+      const { familyId, nodeId } = req.params
+      const file = req.file
+
+      if (!file) {
+        return res.status(400).json({ message: 'file is required' })
+      }
+
+      const { data: existing, error: fetchError } = await supabaseAdmin
+        .from('family_tree_nodes')
+        .select('metadata')
+        .eq('id', nodeId)
+        .eq('family_id', familyId)
+        .single()
+
+      if (fetchError || !existing) {
+        return res.status(404).json({ message: 'Family member not found' })
+      }
+
+      const ext = (file.originalname || '').split('.').pop()?.toLowerCase() || 'jpg'
+      const safeExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? ext : 'jpg'
+      const objectPath = `family-tree/${familyId}/${nodeId}_${Date.now()}.${safeExt}`
+
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from(STORAGE_BUCKET)
+        .upload(objectPath, file.buffer, {
+          contentType: file.mimetype || 'image/jpeg',
+          upsert: true
+        })
+
+      if (uploadError) {
+        console.error('Member photo upload error', uploadError)
+        return res.status(500).json({
+          message: uploadError.message || 'Failed to upload photo'
+        })
+      }
+
+      const metadata = {
+        ...(existing.metadata ?? {}),
+        photoPath: objectPath
+      }
+
+      const { data: updated, error: updateError } = await supabaseAdmin
+        .from('family_tree_nodes')
+        .update({ metadata })
+        .eq('id', nodeId)
+        .eq('family_id', familyId)
+        .select('*')
+        .single()
+
+      if (updateError) {
+        console.error('Update member metadata error', updateError)
+        return res.status(500).json({ message: 'Failed to save photo reference' })
+      }
+
+      res.status(201).json(await serializeNode(updated))
+    } catch (err) {
+      console.error('Member photo upload error', err)
+      res.status(500).json({ message: 'Failed to upload member photo' })
+    }
+  }
+)
 
 // Create or update a family tree node
 router.post('/:familyId/nodes', requireFamilyRole(['ADMIN', 'ADULT']), async (req, res) => {
@@ -14,6 +110,11 @@ router.post('/:familyId/nodes', requireFamilyRole(['ADMIN', 'ADULT']), async (re
       return res.status(400).json({ message: 'fullName is required' })
     }
 
+    const normalizedMetadata = {
+      ...(metadata ?? {}),
+      generation: metadata?.generation ?? 1
+    }
+
     if (id) {
       const { data, error } = await supabaseAdmin
         .from('family_tree_nodes')
@@ -21,7 +122,7 @@ router.post('/:familyId/nodes', requireFamilyRole(['ADMIN', 'ADULT']), async (re
           full_name: fullName,
           birth_date: birthDate,
           death_date: deathDate,
-          metadata,
+          metadata: normalizedMetadata,
           user_id: userId
         })
         .eq('id', id)
@@ -34,7 +135,7 @@ router.post('/:familyId/nodes', requireFamilyRole(['ADMIN', 'ADULT']), async (re
         return res.status(500).json({ message: 'Failed to update node' })
       }
 
-      return res.json(data)
+      return res.json(await serializeNode(data))
     } else {
       const { data, error } = await supabaseAdmin
         .from('family_tree_nodes')
@@ -43,7 +144,7 @@ router.post('/:familyId/nodes', requireFamilyRole(['ADMIN', 'ADULT']), async (re
           full_name: fullName,
           birth_date: birthDate,
           death_date: deathDate,
-          metadata,
+          metadata: normalizedMetadata,
           user_id: userId
         })
         .select('*')
@@ -54,7 +155,7 @@ router.post('/:familyId/nodes', requireFamilyRole(['ADMIN', 'ADULT']), async (re
         return res.status(500).json({ message: 'Failed to create node' })
       }
 
-      return res.status(201).json(data)
+      return res.status(201).json(await serializeNode(data))
     }
   } catch (err) {
     console.error('Node upsert error', err)
@@ -92,7 +193,7 @@ router.post('/:familyId/relationships', requireFamilyRole(['ADMIN', 'ADULT']), a
       return res.status(500).json({ message: 'Failed to create relationship' })
     }
 
-    res.status(201).json(data)
+    res.status(201).json(serializeRelationship(data))
   } catch (err) {
     console.error('Create relationship error', err)
     res.status(500).json({ message: 'Failed to create relationship' })
@@ -121,14 +222,19 @@ router.get('/:familyId', requireFamilyRole(['ADMIN', 'ADULT', 'JUNIOR']), async 
       return res.status(500).json({ message: 'Failed to load family tree' })
     }
 
-    res.json({ nodes, relationships })
+    const serializedNodes = await Promise.all((nodes ?? []).map(serializeNode))
+
+    res.json({
+      nodes: serializedNodes,
+      relationships: (relationships ?? []).map(serializeRelationship)
+    })
   } catch (err) {
     console.error('Get tree error', err)
     res.status(500).json({ message: 'Failed to load family tree' })
   }
 })
 
-// Safe delete node: prevent deletion if it would break tree integrity (e.g., node with children)
+// Safe delete node
 router.delete('/:familyId/nodes/:nodeId', requireFamilyRole(['ADMIN']), async (req, res) => {
   try {
     const { familyId, nodeId } = req.params
@@ -169,4 +275,3 @@ router.delete('/:familyId/nodes/:nodeId', requireFamilyRole(['ADMIN']), async (r
 })
 
 export default router
-

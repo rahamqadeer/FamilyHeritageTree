@@ -83,7 +83,7 @@ class _FamilySetupScreenState extends State<FamilySetupScreen> {
                         width: 100,
                         height: 100,
                         decoration: BoxDecoration(
-                          color: AppColors.accent,
+                          color: AppColors.primaryLight,
                           borderRadius: BorderRadius.circular(25),
                           boxShadow: [
                             BoxShadow(

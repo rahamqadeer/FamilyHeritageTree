@@ -18,14 +18,16 @@ enum MediaType {
   }
 
   static MediaType fromString(String value) {
-    switch (value.toUpperCase()) {
-      case 'IMAGE':
+    switch (value.toLowerCase()) {
+      case 'image':
+      case 'photo':
         return MediaType.image;
-      case 'VIDEO':
+      case 'video':
         return MediaType.video;
-      case 'AUDIO':
+      case 'audio':
         return MediaType.audio;
-      case 'DOCUMENT':
+      case 'document':
+      case 'text':
         return MediaType.document;
       default:
         return MediaType.image;
@@ -54,6 +56,8 @@ class Memory {
   final String? description;
   final MediaType mediaType;
   final String? storagePath;
+  /// Time-limited URL for displaying media (from API `media_url`).
+  final String? mediaUrl;
   final String? event;
   final DateTime? eventDate;
   final List<String>? tags;
@@ -67,6 +71,7 @@ class Memory {
     this.description,
     required this.mediaType,
     this.storagePath,
+    this.mediaUrl,
     this.event,
     this.eventDate,
     this.tags,
@@ -82,6 +87,7 @@ class Memory {
       description: json['description'] as String?,
       mediaType: MediaType.fromString(json['media_type'] as String),
       storagePath: json['storage_path'] as String?,
+      mediaUrl: json['media_url'] as String?,
       event: json['event'] as String?,
       eventDate: json['event_date'] != null
           ? DateTime.parse(json['event_date'] as String)
@@ -89,8 +95,18 @@ class Memory {
       tags: json['tags'] != null
           ? List<String>.from(json['tags'] as List)
           : null,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String)
+          : DateTime.now(),
     );
+  }
+
+  /// URL used to load memory media in the gallery and detail views.
+  String? get displayUrl {
+    if (mediaUrl != null && mediaUrl!.isNotEmpty) return mediaUrl;
+    final path = storagePath;
+    if (path == null || path.isEmpty) return null;
+    return path;
   }
 
   Map<String, dynamic> toJson() => {
@@ -104,11 +120,7 @@ class Memory {
     if (tags != null) 'tags': tags,
   };
 
-  String? get publicUrl {
-    if (storagePath == null) return null;
-    // Supabase public URL pattern
-    return storagePath;
-  }
+  String? get publicUrl => displayUrl;
 }
 
 enum ConditionType {

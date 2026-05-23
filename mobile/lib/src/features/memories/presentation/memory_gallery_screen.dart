@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:family_digital_heritage_vault/src/core/models/memory.dart';
+import 'package:family_digital_heritage_vault/src/core/services/service_locator.dart';
 import 'package:family_digital_heritage_vault/src/core/theme/app_theme.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/presentation/memory_detail_screen.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/presentation/memory_upload_screen.dart';
@@ -232,13 +233,7 @@ class _MemoryGalleryScreenState extends State<MemoryGalleryScreen> {
                     final memory = filteredMemories[index];
                     return _MemoryCard(
                       memory: memory,
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => MemoryDetailScreen(memory: memory),
-                          ),
-                        );
-                      },
+                      onTap: () => _openMemory(context, memory),
                     );
                   },
                   childCount: filteredMemories.length,
@@ -262,6 +257,23 @@ class _MemoryGalleryScreenState extends State<MemoryGalleryScreen> {
         child: const Icon(Icons.add),
       ),
     );
+  }
+
+  Future<void> _openMemory(BuildContext context, Memory memory) async {
+    try {
+      final fresh = await services.memoryService.getMemory(memory.id);
+      if (!context.mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => MemoryDetailScreen(memory: fresh),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open memory: $e')),
+      );
+    }
   }
 
   Widget _buildEmptyState() {
@@ -414,20 +426,23 @@ class _MemoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: ClipRRect(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: Stack(
             fit: StackFit.expand,
@@ -500,13 +515,15 @@ class _MemoryCard extends StatelessWidget {
           ),
         ),
       ),
+      ),
     );
   }
 
   Widget _buildBackground() {
-    if (memory.storagePath != null && memory.mediaType == MediaType.image) {
+    final imageUrl = memory.displayUrl;
+    if (imageUrl != null && memory.mediaType == MediaType.image) {
       return CachedNetworkImage(
-        imageUrl: memory.storagePath!,
+        imageUrl: imageUrl,
         fit: BoxFit.cover,
         placeholder: (context, url) => Container(
           decoration: BoxDecoration(
