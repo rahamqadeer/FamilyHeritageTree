@@ -68,8 +68,20 @@ class ApiClient {
     String message = 'Request failed';
     try {
       final body = jsonDecode(response.body);
-      message = body['message'] ?? message;
-    } catch (_) {}
+      if (body is Map<String, dynamic>) {
+        message = body['message'] as String? ?? message;
+        if (response.statusCode == 0 ||
+            (message == 'Request failed' && response.body.isEmpty)) {
+          message =
+              'Cannot reach the server. Start the backend with: npm run dev (port 4000)';
+        }
+      }
+    } catch (_) {
+      if (response.statusCode == 0) {
+        message =
+            'Cannot reach the server. Start the backend with: npm run dev (port 4000)';
+      }
+    }
 
     throw ApiException(message, response.statusCode);
   }

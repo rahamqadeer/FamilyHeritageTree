@@ -63,6 +63,15 @@ class FamilyTreeService {
     await _client.delete('/api/family-tree/$familyId/nodes/$nodeId');
   }
 
+  Future<void> deleteRelationship({
+    required String familyId,
+    required String relationshipId,
+  }) async {
+    await _client.delete(
+      '/api/family-tree/$familyId/relationships/$relationshipId',
+    );
+  }
+
   Future<FamilyTreeNode> uploadMemberPhoto({
     required String familyId,
     required String nodeId,

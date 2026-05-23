@@ -25,7 +25,10 @@ router.post('/', async (req, res) => {
 
     if (famError) {
       console.error('Error creating family', famError)
-      return res.status(500).json({ message: 'Failed to create family' })
+      return res.status(500).json({
+        message: famError.message || 'Failed to create family',
+        code: famError.code
+      })
     }
 
     const { error: memberError } = await supabaseAdmin
@@ -38,7 +41,12 @@ router.post('/', async (req, res) => {
 
     if (memberError) {
       console.error('Error creating admin membership', memberError)
-      return res.status(500).json({ message: 'Failed to assign admin role' })
+      // Roll back orphan family row when membership cannot be created.
+      await supabaseAdmin.from('families').delete().eq('id', family.id)
+      return res.status(500).json({
+        message: memberError.message || 'Failed to assign admin role',
+        code: memberError.code
+      })
     }
 
     res.status(201).json(family)
@@ -63,12 +71,14 @@ router.get('/', async (req, res) => {
       return res.status(500).json({ message: 'Failed to list families' })
     }
 
-    const families = (data || []).map(row => ({
-      id: row.families.id,
-      name: row.families.name,
-      created_at: row.families.created_at,
-      role: row.role
-    }))
+    const families = (data || [])
+      .filter((row) => row.families != null)
+      .map((row) => ({
+        id: row.families.id,
+        name: row.families.name,
+        created_at: row.families.created_at ?? new Date().toISOString(),
+        role: row.role
+      }))
 
     res.json(families)
   } catch (err) {

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/models/family.dart';
 import '../../../core/models/family_tree_node.dart';
+import '../../../core/services/api_client.dart';
 import '../../../core/services/service_locator.dart';
 
 class FamilyProvider extends ChangeNotifier {
@@ -54,7 +55,7 @@ class FamilyProvider extends ChangeNotifier {
       _selectedFamily = family;
       _familyTree = FamilyTree(nodes: [], relationships: []);
     } catch (e) {
-      _error = 'Failed to create family: ${e.toString()}';
+      _error = _formatError(e);
     } finally {
       _loading = false;
       notifyListeners();
@@ -111,8 +112,27 @@ class FamilyProvider extends ChangeNotifier {
     MemberGender gender = MemberGender.unspecified,
     XFile? photo,
     Map<String, dynamic>? metadata,
+    String? familyId,
+    String? relatedMemberId,
+    MemberLinkType linkType = MemberLinkType.none,
   }) async {
-    if (_selectedFamily == null) return null;
+    if (familyId != null) {
+      final match = _families.where((f) => f.id == familyId);
+      if (match.isEmpty) {
+        _error = 'Selected family not found';
+        notifyListeners();
+        return null;
+      }
+      if (_selectedFamily?.id != familyId) {
+        await selectFamily(match.first);
+      }
+    }
+
+    if (_selectedFamily == null) {
+      _error = 'Create or select a family vault first';
+      notifyListeners();
+      return null;
+    }
 
     _loading = true;
     _error = null;
@@ -134,30 +154,50 @@ class FamilyProvider extends ChangeNotifier {
       );
 
       if (photo != null) {
-        node = await services.familyTreeService.uploadMemberPhoto(
-          familyId: _selectedFamily!.id,
-          nodeId: node.id,
-          file: photo,
-        );
+        try {
+          node = await services.familyTreeService.uploadMemberPhoto(
+            familyId: _selectedFamily!.id,
+            nodeId: node.id,
+            file: photo,
+          );
+        } catch (photoError) {
+          _mergeNodeIntoTree(node);
+          _error =
+              'Member saved, but photo upload failed: ${_formatError(photoError)}';
+          notifyListeners();
+          return node;
+        }
       }
+
+      if (relatedMemberId != null &&
+          linkType != MemberLinkType.none &&
+          relatedMemberId.isNotEmpty) {
+        try {
+          await _createLinkBetween(
+            newNodeId: node.id,
+            existingNodeId: relatedMemberId,
+            linkType: linkType,
+          );
+        } catch (linkError) {
+          _mergeNodeIntoTree(node);
+          _error =
+              'Member saved, but relationship failed: ${_formatError(linkError)}';
+          notifyListeners();
+          return node;
+        }
+      }
+
       try {
         await loadFamilyTree();
+        _error = null;
       } catch (reloadError) {
-        // Member was saved; merge into local tree if reload fails.
-        final tree = _familyTree;
-        if (tree != null && !tree.nodes.any((n) => n.id == node.id)) {
-          _familyTree = FamilyTree(
-            nodes: [...tree.nodes, node],
-            relationships: tree.relationships,
-          );
-        } else if (tree == null) {
-          _familyTree = FamilyTree(nodes: [node], relationships: []);
-        }
-        _error = 'Member added but tree refresh failed: $reloadError';
+        _mergeNodeIntoTree(node);
+        _error =
+            'Member added, but tree refresh failed: ${_formatError(reloadError)}';
       }
       return node;
     } catch (e) {
-      _error = 'Failed to add family member: ${e.toString()}';
+      _error = 'Failed to add family member: ${_formatError(e)}';
       return null;
     } finally {
       _loading = false;
@@ -211,6 +251,58 @@ class FamilyProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _error = 'Failed to update family member: ${e.toString()}';
+      return false;
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> deleteRelationship(String relationshipId) async {
+    if (_selectedFamily == null) return false;
+
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await services.familyTreeService.deleteRelationship(
+        familyId: _selectedFamily!.id,
+        relationshipId: relationshipId,
+      );
+      await loadFamilyTree();
+      return true;
+    } catch (e) {
+      _error = 'Failed to remove relationship: ${_formatError(e)}';
+      return false;
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> linkMembers({
+    required String nodeId,
+    required String relatedMemberId,
+    required MemberLinkType linkType,
+  }) async {
+    if (_selectedFamily == null) return false;
+    if (linkType == MemberLinkType.none) return true;
+
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _createLinkBetween(
+        newNodeId: nodeId,
+        existingNodeId: relatedMemberId,
+        linkType: linkType,
+      );
+      await loadFamilyTree();
+      return true;
+    } catch (e) {
+      _error = 'Failed to save relationship: ${_formatError(e)}';
       return false;
     } finally {
       _loading = false;
@@ -273,5 +365,70 @@ class FamilyProvider extends ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  Future<void> _createLinkBetween({
+    required String newNodeId,
+    required String existingNodeId,
+    required MemberLinkType linkType,
+  }) async {
+    final familyId = _selectedFamily!.id;
+    switch (linkType) {
+      case MemberLinkType.parentOfNew:
+        await services.familyTreeService.createRelationship(
+          familyId: familyId,
+          fromNodeId: existingNodeId,
+          toNodeId: newNodeId,
+          type: RelationshipType.parent,
+        );
+        break;
+      case MemberLinkType.childOfNew:
+        await services.familyTreeService.createRelationship(
+          familyId: familyId,
+          fromNodeId: newNodeId,
+          toNodeId: existingNodeId,
+          type: RelationshipType.parent,
+        );
+        break;
+      case MemberLinkType.spouseOfNew:
+        await services.familyTreeService.createRelationship(
+          familyId: familyId,
+          fromNodeId: newNodeId,
+          toNodeId: existingNodeId,
+          type: RelationshipType.spouse,
+        );
+        break;
+      case MemberLinkType.none:
+        break;
+    }
+  }
+
+  void _mergeNodeIntoTree(FamilyTreeNode node) {
+    final tree = _familyTree;
+    if (tree != null && !tree.nodes.any((n) => n.id == node.id)) {
+      _familyTree = FamilyTree(
+        nodes: [...tree.nodes, node],
+        relationships: tree.relationships,
+      );
+    } else if (tree == null) {
+      _familyTree = FamilyTree(nodes: [node], relationships: []);
+    }
+  }
+
+  String _formatError(Object e) {
+    if (e is ApiException) {
+      return e.message;
+    }
+    final text = e.toString();
+    if (text.contains('Connection refused') ||
+        text.contains('Failed host lookup') ||
+        text.contains('SocketException') ||
+        text.contains('ClientException')) {
+      return 'Cannot reach the server. Open a terminal in the backend folder and run: npm run dev';
+    }
+    if (text.startsWith('ApiException: ')) {
+      return text.replaceFirst('ApiException: ', '').split(' (status:').first;
+    }
+    return text;
   }
 }

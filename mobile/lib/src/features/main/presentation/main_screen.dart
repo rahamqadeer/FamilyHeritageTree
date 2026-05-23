@@ -1,6 +1,5 @@
 import 'package:family_digital_heritage_vault/src/core/theme/app_theme.dart';
 import 'package:family_digital_heritage_vault/src/features/dashboard/presentation/dashboard_screen.dart';
-import 'package:family_digital_heritage_vault/src/features/family/presentation/family_setup_screen.dart';
 import 'package:family_digital_heritage_vault/src/features/family/state/family_provider.dart';
 import 'package:family_digital_heritage_vault/src/features/family_tree/presentation/family_tree_screen.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/presentation/memory_gallery_screen.dart';
@@ -50,20 +49,6 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Consumer<FamilyProvider>(
       builder: (context, familyProvider, child) {
-        // Show loading while fetching families
-        if (familyProvider.loading && familyProvider.families.isEmpty) {
-          return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
-        }
-
-        // Show family setup if user has no families
-        if (!familyProvider.hasFamily) {
-          return const FamilySetupScreen();
-        }
-
         final screens = <Widget>[
           DashboardScreen(
             onSwitchTab: _switchTab,

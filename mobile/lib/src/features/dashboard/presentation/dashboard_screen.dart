@@ -1,5 +1,6 @@
 import 'package:family_digital_heritage_vault/src/core/theme/app_theme.dart';
 import 'package:family_digital_heritage_vault/src/features/auth/state/auth_provider.dart';
+import 'package:family_digital_heritage_vault/src/features/family/presentation/family_setup_screen.dart';
 import 'package:family_digital_heritage_vault/src/features/family/state/family_provider.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/presentation/memory_upload_screen.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/state/memory_provider.dart';
@@ -27,7 +28,8 @@ class DashboardScreen extends StatelessWidget {
     final memories = context.watch<MemoryProvider>();
 
     final userName = _extractName(auth.user?.userMetadata?['full_name'] as String? ?? auth.user?.email ?? 'User');
-    final familyName = family.selectedFamily?.name ?? 'My Family';
+    final hasFamily = family.hasFamily;
+    final familyName = family.selectedFamily?.name ?? 'No family vault yet';
     final memberCount = family.familyTree?.nodes.length ?? 0;
     final memoryCount = memories.totalCount;
     final recentMemories = memories.getRecent(limit: 4);
@@ -108,28 +110,61 @@ class DashboardScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      // Family name
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.family_restroom, color: Colors.white, size: 18),
-                            const SizedBox(width: 6),
-                            Text(
-                              familyName,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                              ),
+                      // Family name + selector
+                      if (family.families.length > 1)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: family.selectedFamily?.id,
+                              dropdownColor: AppColors.primaryDark,
+                              icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                              items: family.families
+                                  .map(
+                                    (f) => DropdownMenuItem(
+                                      value: f.id,
+                                      child: Text(
+                                        f.name,
+                                        style: const TextStyle(color: Colors.white),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (id) {
+                                if (id == null) return;
+                                final selected = family.families.firstWhere((f) => f.id == id);
+                                family.selectFamily(selected);
+                                context.read<MemoryProvider>().loadMemories(id);
+                              },
                             ),
-                          ],
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.family_restroom, color: Colors.white, size: 18),
+                              const SizedBox(width: 6),
+                              Text(
+                                familyName,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
                       const SizedBox(height: 20),
                       // Stats row
                       Row(
@@ -160,14 +195,68 @@ class DashboardScreen extends StatelessWidget {
               ),
             ),
           ),
+          if (!hasFamily)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.divider),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Get started',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Create a family vault to unlock your tree, memories, and invites.',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => showCreateFamilyDialog(context),
+                          icon: const Icon(Icons.family_restroom),
+                          label: const Text('Create Family Vault'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           // Quick Actions
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Text(
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
                     'Quick Actions',
                     style: TextStyle(
                       fontSize: 18,
@@ -175,20 +264,30 @@ class DashboardScreen extends StatelessWidget {
                       color: AppColors.textPrimary,
                     ),
                   ),
+                  ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
+                  Center(
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                      _QuickActionCard(
+                        icon: Icons.family_restroom,
+                        label: 'Family',
+                        color: AppColors.primary,
+                        onTap: () => showCreateFamilyDialog(context),
+                      ),
                       _QuickActionCard(
                         icon: Icons.account_tree,
                         label: 'Tree',
-                        color: AppColors.primary,
+                        color: AppColors.primaryLight,
                         onTap: () => onSwitchTab?.call(1),
                       ),
                       _QuickActionCard(
-                        icon: Icons.add,
-                        label: 'Add',
-                        color: AppColors.primaryLight,
+                        icon: Icons.add_photo_alternate_outlined,
+                        label: 'Add Memories',
+                        color: AppColors.accent,
                         onTap: () {
                           if (onOpenUpload != null) {
                             onOpenUpload!();
@@ -204,16 +303,23 @@ class DashboardScreen extends StatelessWidget {
                       _QuickActionCard(
                         icon: Icons.photo_library,
                         label: 'Gallery',
-                        color: AppColors.accent,
+                        color: AppColors.primaryDark,
                         onTap: () => onSwitchTab?.call(2),
                       ),
                       _QuickActionCard(
                         icon: Icons.person_add,
                         label: 'Invite',
                         color: AppColors.accentLight,
-                        onTap: () => _showInviteDialog(context),
+                        onTap: () {
+                          if (!hasFamily) {
+                            showCreateFamilyDialog(context);
+                            return;
+                          }
+                          _showInviteDialog(context);
+                        },
                       ),
                     ],
+                    ),
                   ),
                 ],
               ),
@@ -499,8 +605,8 @@ class _QuickActionCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Ink(
-          width: 75,
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          width: 88,
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -528,10 +634,13 @@ class _QuickActionCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w500,
                   color: AppColors.textPrimary,
+                  height: 1.2,
                 ),
               ),
             ],

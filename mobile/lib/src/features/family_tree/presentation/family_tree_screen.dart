@@ -1,6 +1,8 @@
 import 'package:family_digital_heritage_vault/src/core/models/family_tree_node.dart';
 import 'package:family_digital_heritage_vault/src/core/theme/app_theme.dart';
 import 'package:family_digital_heritage_vault/src/features/family/state/family_provider.dart';
+import 'package:family_digital_heritage_vault/src/features/family/presentation/family_setup_screen.dart';
+import 'package:family_digital_heritage_vault/src/features/family_tree/presentation/family_tree_diagram_view.dart';
 import 'package:family_digital_heritage_vault/src/features/family_tree/presentation/member_form_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -19,6 +21,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   String _selectedGeneration = 'All';
   final List<String> _generations = FamilyTreeNode.generationFilterChips;
   final Set<String> _favoriteIds = {};
+  bool _showTreeDiagram = true;
 
   List<FamilyTreeNode> _getFilteredMembers(FamilyProvider provider) {
     var nodes = provider.familyTree?.nodes ?? [];
@@ -107,13 +110,88 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Your Family Heritage',
+                        familyProvider.selectedFamily?.name ?? 'Your Family Heritage',
                         style: TextStyle(
                           fontSize: 16,
                           color: Colors.white.withOpacity(0.9),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      if (familyProvider.families.length > 1) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              isExpanded: true,
+                              value: familyProvider.selectedFamily?.id,
+                              items: familyProvider.families
+                                  .map(
+                                    (f) => DropdownMenuItem(
+                                      value: f.id,
+                                      child: Text(f.name),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (id) {
+                                if (id == null) return;
+                                final f = familyProvider.families
+                                    .firstWhere((fam) => fam.id == id);
+                                familyProvider.selectFamily(f);
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SegmentedButton<bool>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: true,
+                                  label: Text('Tree'),
+                                  icon: Icon(Icons.account_tree, size: 18),
+                                ),
+                                ButtonSegment(
+                                  value: false,
+                                  label: Text('Cards'),
+                                  icon: Icon(Icons.grid_view, size: 18),
+                                ),
+                              ],
+                              selected: {_showTreeDiagram},
+                              onSelectionChanged: (s) {
+                                setState(() => _showTreeDiagram = s.first);
+                              },
+                              style: ButtonStyle(
+                                backgroundColor: WidgetStateProperty.resolveWith((states) {
+                                  if (states.contains(WidgetState.selected)) {
+                                    return Colors.white;
+                                  }
+                                  return Colors.white.withOpacity(0.2);
+                                }),
+                                foregroundColor: WidgetStateProperty.resolveWith((states) {
+                                  if (states.contains(WidgetState.selected)) {
+                                    return AppColors.primary;
+                                  }
+                                  return Colors.white;
+                                }),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: () => showCreateFamilyDialog(context),
+                            icon: const Icon(Icons.add_home_work, color: Colors.white),
+                            tooltip: 'Add family',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                       // Search bar
                       Container(
                         decoration: BoxDecoration(
@@ -205,13 +283,53 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
             ),
           ),
           // Content
-          if (familyProvider.loading)
+          if (familyProvider.selectedFamily == null)
+            SliverFillRemaining(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.family_restroom, size: 64, color: AppColors.textSecondary),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No family selected',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () => showCreateFamilyDialog(context),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Family'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else if (familyProvider.loading)
             const SliverFillRemaining(
               child: Center(child: CircularProgressIndicator()),
             )
           else if (filteredMembers.isEmpty)
             SliverFillRemaining(
               child: _buildEmptyState(),
+            )
+          else if (_showTreeDiagram)
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height * 0.58,
+                child: ColoredBox(
+                  color: AppColors.background,
+                  child: FamilyTreeDiagramView(
+                    tree: (familyProvider.familyTree ??
+                            FamilyTree(nodes: const [], relationships: const []))
+                        .subsetForNodes(filteredMembers),
+                    onNodeTap: (node) => _showMemberDetail(context, node),
+                  ),
+                ),
+              ),
             )
           else if (_showGenerationSections)
             ..._buildGenerationSectionSlivers(context, filteredMembers)
@@ -560,6 +678,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     int generation = node.generation;
     MemberGender gender = node.gender;
     XFile? pickedPhoto;
+    final removedRelationshipIds = <String>{};
+    String? newRelatedMemberId;
+    MemberLinkType newLinkType = MemberLinkType.parentOfNew;
 
     showModalBottomSheet(
       context: context,
@@ -678,6 +799,32 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                     }
                   },
                 ),
+                const SizedBox(height: 16),
+                Builder(
+                  builder: (context) {
+                    final fp = context.watch<FamilyProvider>();
+                    final tree = fp.familyTree;
+                    final existing = tree?.relationshipsInvolving(node.id) ?? [];
+                    final allMembers = tree?.nodes ?? [];
+                    return MemberEditRelationshipsSection(
+                      member: node,
+                      existing: existing,
+                      removedRelationshipIds: removedRelationshipIds,
+                      linkableMembers: allMembers,
+                      newRelatedMemberId: newRelatedMemberId,
+                      newLinkType: newLinkType,
+                      onRemoveRelationship: (id) {
+                        setSheetState(() => removedRelationshipIds.add(id));
+                      },
+                      onNewRelatedChanged: (id) {
+                        setSheetState(() => newRelatedMemberId = id);
+                      },
+                      onNewLinkTypeChanged: (t) {
+                        setSheetState(() => newLinkType = t);
+                      },
+                    );
+                  },
+                ),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
@@ -686,7 +833,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                       if (nameController.text.isEmpty) return;
                       Navigator.pop(ctx);
                       final familyProvider = context.read<FamilyProvider>();
-                      final success = await familyProvider.updateFamilyMember(
+                      var success = await familyProvider.updateFamilyMember(
                         nodeId: node.id,
                         fullName: nameController.text.trim(),
                         birthDate: birthDate,
@@ -695,10 +842,29 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                         gender: gender,
                         photo: pickedPhoto,
                       );
+                      if (success) {
+                        for (final relId in removedRelationshipIds) {
+                          final ok =
+                              await familyProvider.deleteRelationship(relId);
+                          if (!ok) success = false;
+                        }
+                      }
+                      if (success &&
+                          newRelatedMemberId != null &&
+                          newRelatedMemberId!.isNotEmpty) {
+                        final linked = await familyProvider.linkMembers(
+                          nodeId: node.id,
+                          relatedMemberId: newRelatedMemberId!,
+                          linkType: newLinkType,
+                        );
+                        if (!linked) success = false;
+                      }
                       if (mounted) {
                         if (success) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Member updated successfully')),
+                            const SnackBar(
+                              content: Text('Member and relationships saved'),
+                            ),
                           );
                         } else if (familyProvider.error != null) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -720,6 +886,15 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   }
 
   void _showAddMemberDialog(BuildContext context) {
+    final familyProvider = context.read<FamilyProvider>();
+    if (familyProvider.families.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add a family from Home first')),
+      );
+      showCreateFamilyDialog(context);
+      return;
+    }
+
     final nameController = TextEditingController();
     final picker = ImagePicker();
     DateTime? birthDate;
@@ -727,6 +902,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     MemberGender gender = MemberGender.unspecified;
     XFile? pickedPhoto;
     bool saving = false;
+    String? selectedFamilyId = familyProvider.selectedFamily?.id ?? familyProvider.families.first.id;
+    String? relatedMemberId;
+    MemberLinkType linkType = MemberLinkType.parentOfNew;
 
     showModalBottomSheet(
       context: context,
@@ -773,6 +951,23 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
                   ),
+                ),
+                const SizedBox(height: 16),
+                FamilyPickerField(
+                  selectedFamilyId: selectedFamilyId,
+                  onChanged: (id) async {
+                    if (id == null) return;
+                    setSheetState(() {
+                      selectedFamilyId = id;
+                      relatedMemberId = null;
+                    });
+                    final fp = ctx.read<FamilyProvider>();
+                    if (fp.selectedFamily?.id != id) {
+                      final fam = fp.families.firstWhere((f) => f.id == id);
+                      await fp.selectFamily(fam);
+                      if (ctx.mounted) setSheetState(() {});
+                    }
+                  },
                 ),
                 const SizedBox(height: 16),
                 MemberPhotoPicker(
@@ -848,6 +1043,24 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                     }
                   },
                 ),
+                const SizedBox(height: 16),
+                Builder(
+                  builder: (context) {
+                    final fp = context.watch<FamilyProvider>();
+                    final members = fp.familyTree?.nodes ?? [];
+                    final sameFamily = selectedFamilyId == fp.selectedFamily?.id;
+                    final existing = sameFamily
+                        ? members
+                        : <FamilyTreeNode>[];
+                    return MemberRelationFields(
+                      existingMembers: existing,
+                      relatedMemberId: relatedMemberId,
+                      linkType: linkType,
+                      onRelatedChanged: (id) => setSheetState(() => relatedMemberId = id),
+                      onLinkTypeChanged: (t) => setSheetState(() => linkType = t),
+                    );
+                  },
+                ),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
@@ -863,24 +1076,48 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                             }
                             setSheetState(() => saving = true);
                             final familyProvider = context.read<FamilyProvider>();
+                            if (selectedFamilyId != null &&
+                                selectedFamilyId != familyProvider.selectedFamily?.id) {
+                              final fam = familyProvider.families
+                                  .firstWhere((f) => f.id == selectedFamilyId);
+                              await familyProvider.selectFamily(fam);
+                            }
                             final node = await familyProvider.addFamilyMember(
                               fullName: nameController.text.trim(),
                               birthDate: birthDate,
                               generation: generation,
                               gender: gender,
                               photo: pickedPhoto,
+                              familyId: selectedFamilyId,
+                              relatedMemberId: relatedMemberId,
+                              linkType: relatedMemberId != null
+                                  ? linkType
+                                  : MemberLinkType.none,
                             );
                             if (ctx.mounted) {
                               Navigator.pop(ctx);
                             }
                             if (mounted) {
                               if (node != null) {
+                                final warning = familyProvider.error;
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('${node.fullName} added to family tree')),
+                                  SnackBar(
+                                    content: Text(
+                                      warning != null
+                                          ? warning
+                                          : '${node.fullName} added to family tree',
+                                    ),
+                                  ),
                                 );
+                                if (warning != null) {
+                                  familyProvider.clearError();
+                                }
                               } else if (familyProvider.error != null) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(familyProvider.error!)),
+                                  SnackBar(
+                                    content: Text(familyProvider.error!),
+                                    backgroundColor: AppColors.error,
+                                  ),
                                 );
                               }
                             }
@@ -996,6 +1233,13 @@ class _MemberCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final genLabel = FamilyTreeNode.labelForGeneration(node.generation);
     final gender = node.gender;
+    final cardStyle = memberCardStyleForGender(gender);
+    final titleColor = cardStyle.useLightText
+        ? Colors.white
+        : AppColors.textPrimary;
+    final subtitleColor = cardStyle.useLightText
+        ? Colors.white.withOpacity(0.85)
+        : AppColors.textSecondary;
 
     return Material(
       color: Colors.transparent,
@@ -1004,11 +1248,13 @@ class _MemberCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: Ink(
           decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient,
+            gradient: cardStyle.gradient,
+            color: cardStyle.solidColor,
             borderRadius: BorderRadius.circular(16),
+            border: cardStyle.border,
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withOpacity(0.3),
+                color: cardStyle.shadowColor,
                 blurRadius: 10,
                 offset: const Offset(0, 5),
               ),
@@ -1025,10 +1271,10 @@ class _MemberCard extends StatelessWidget {
                     const SizedBox(height: 10),
                     Text(
                       node.fullName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: titleColor,
                       ),
                       textAlign: TextAlign.center,
                       maxLines: 2,
@@ -1041,7 +1287,7 @@ class _MemberCard extends StatelessWidget {
                           : genLabel,
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.white.withOpacity(0.85),
+                        color: subtitleColor,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -1055,13 +1301,17 @@ class _MemberCard extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.45),
+                      color: cardStyle.useLightText
+                          ? Colors.black.withOpacity(0.35)
+                          : AppColors.divider,
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       genderIcon(gender),
                       size: 16,
-                      color: Colors.white,
+                      color: cardStyle.useLightText
+                          ? Colors.white
+                          : AppColors.textPrimary,
                     ),
                   ),
                 ),
@@ -1073,8 +1323,12 @@ class _MemberCard extends StatelessWidget {
                   child: Icon(
                     isFavorite ? Icons.favorite : Icons.favorite_border,
                     color: isFavorite
-                        ? AppColors.textOnPrimary
-                        : Colors.white.withOpacity(0.7),
+                        ? (cardStyle.useLightText
+                            ? AppColors.textOnPrimary
+                            : AppColors.primary)
+                        : (cardStyle.useLightText
+                            ? Colors.white.withOpacity(0.7)
+                            : AppColors.textSecondary),
                     size: 20,
                   ),
                 ),

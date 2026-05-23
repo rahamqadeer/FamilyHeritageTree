@@ -12,11 +12,19 @@ class Family {
   });
 
   factory Family.fromJson(Map<String, dynamic> json) {
+    final createdRaw = json['created_at'];
+    DateTime createdAt = DateTime.now();
+    if (createdRaw is String && createdRaw.isNotEmpty) {
+      createdAt = DateTime.parse(createdRaw);
+    } else if (createdRaw != null) {
+      createdAt = DateTime.tryParse(createdRaw.toString()) ?? DateTime.now();
+    }
+
     return Family(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      role: json['role'] as String? ?? 'ADULT',
+      id: json['id']?.toString() ?? '',
+      name: json['name'] as String? ?? '',
+      createdAt: createdAt,
+      role: json['role'] as String? ?? 'ADMIN',
     );
   }
 

@@ -1,28 +1,40 @@
 import 'package:flutter/material.dart';
 
-/// Monochrome palette — black, white, and gray only.
 class AppColors {
-  static const Color primary = Color(0xFF000000);
-  static const Color primaryLight = Color(0xFF333333);
-  static const Color primaryDark = Color(0xFF000000);
+  static const Color primary = Color(0xFF7C3AED);
+  static const Color primaryLight = Color(0xFF8B5CF6);
+  static const Color primaryDark = Color(0xFF6D28D9);
 
-  static const Color accent = Color(0xFF1A1A1A);
-  static const Color accentLight = Color(0xFF525252);
+  static const Color accent = Color(0xFF10B981);
+  static const Color accentLight = Color(0xFF34D399);
 
-  static const Color gradientStart = Color(0xFF000000);
-  static const Color gradientEnd = Color(0xFF3D3D3D);
+  static const Color gradientStart = Color(0xFF6366F1);
+  static const Color gradientEnd = Color(0xFF8B5CF6);
 
-  static const Color background = Color(0xFFFFFFFF);
-  static const Color surface = Color(0xFFFFFFFF);
-  static const Color cardBackground = Color(0xFFFFFFFF);
+  static const Color background = Color(0xFFF9FAFB);
+  static const Color surface = Colors.white;
+  static const Color cardBackground = Colors.white;
 
-  static const Color textPrimary = Color(0xFF000000);
-  static const Color textSecondary = Color(0xFF6B6B6B);
-  static const Color textOnPrimary = Color(0xFFFFFFFF);
+  static const Color textPrimary = Color(0xFF111827);
+  static const Color textSecondary = Color(0xFF6B7280);
+  static const Color textOnPrimary = Colors.white;
 
-  static const Color divider = Color(0xFFE5E5E5);
-  static const Color error = Color(0xFF1A1A1A);
-  static const Color success = Color(0xFF404040);
+  static const Color divider = Color(0xFFE5E7EB);
+  static const Color error = Color(0xFFEF4444);
+  static const Color success = Color(0xFF10B981);
+
+  /// Male member cards — blue gradient.
+  static const Color maleCardStart = Color(0xFF3B82F6);
+  static const Color maleCardEnd = Color(0xFF2563EB);
+
+  /// Female member cards — pink gradient.
+  static const Color femaleCardStart = Color(0xFFF472B6);
+  static const Color femaleCardEnd = Color(0xFFEC4899);
+
+  /// Unspecified / other — neutral light card.
+  static const Color neutralCardStart = Color(0xFFFFFFFF);
+  static const Color neutralCardEnd = Color(0xFFF3F4F6);
+  static const Color neutralCardBorder = Color(0xFFE5E7EB);
 
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
@@ -33,14 +45,25 @@ class AppColors {
   static const LinearGradient headerGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [Color(0xFF000000), Color(0xFF2A2A2A)],
+    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+  );
+
+  static const LinearGradient maleMemberGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [maleCardStart, maleCardEnd],
+  );
+
+  static const LinearGradient femaleMemberGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [femaleCardStart, femaleCardEnd],
   );
 }
 
 class AppTheme {
   static ThemeData get lightTheme => ThemeData(
         useMaterial3: true,
-        brightness: Brightness.light,
         colorScheme: const ColorScheme.light(
           primary: AppColors.primary,
           onPrimary: AppColors.textOnPrimary,
@@ -50,7 +73,6 @@ class AppTheme {
           onSurface: AppColors.textPrimary,
           error: AppColors.error,
           onError: AppColors.textOnPrimary,
-          outline: AppColors.divider,
         ),
         scaffoldBackgroundColor: AppColors.background,
         appBarTheme: const AppBarTheme(
@@ -67,18 +89,16 @@ class AppTheme {
         ),
         cardTheme: CardThemeData(
           color: AppColors.cardBackground,
-          elevation: 0,
+          elevation: 2,
+          shadowColor: Colors.black26,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: AppColors.divider),
           ),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: AppColors.textOnPrimary,
-            disabledBackgroundColor: Color(0xFFBDBDBD),
-            disabledForegroundColor: AppColors.textOnPrimary,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(30),
@@ -93,7 +113,7 @@ class AppTheme {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(30),
             ),
-            side: const BorderSide(color: AppColors.textPrimary, width: 1.5),
+            side: const BorderSide(color: AppColors.primary, width: 1.5),
           ),
         ),
         textButtonTheme: TextButtonThemeData(
@@ -120,7 +140,7 @@ class AppTheme {
           ),
           errorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+            borderSide: const BorderSide(color: AppColors.error),
           ),
           prefixIconColor: AppColors.textSecondary,
           hintStyle: const TextStyle(color: AppColors.textSecondary),
@@ -131,7 +151,7 @@ class AppTheme {
           selectedItemColor: AppColors.primary,
           unselectedItemColor: AppColors.textSecondary,
           type: BottomNavigationBarType.fixed,
-          elevation: 0,
+          elevation: 8,
         ),
         chipTheme: ChipThemeData(
           backgroundColor: AppColors.surface,
@@ -147,83 +167,32 @@ class AppTheme {
         floatingActionButtonTheme: const FloatingActionButtonThemeData(
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.textOnPrimary,
-          elevation: 2,
+          elevation: 4,
         ),
         dividerTheme: const DividerThemeData(
           color: AppColors.divider,
           thickness: 1,
-        ),
-        checkboxTheme: CheckboxThemeData(
-          fillColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return AppColors.primary;
-            }
-            return Colors.transparent;
-          }),
-          checkColor: WidgetStateProperty.all(AppColors.textOnPrimary),
-          side: const BorderSide(color: AppColors.textPrimary, width: 1.5),
-        ),
-        switchTheme: SwitchThemeData(
-          thumbColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return AppColors.textOnPrimary;
-            }
-            return AppColors.surface;
-          }),
-          trackColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.selected)) {
-              return AppColors.primary;
-            }
-            return AppColors.divider;
-          }),
         ),
         snackBarTheme: const SnackBarThemeData(
           backgroundColor: AppColors.primary,
           contentTextStyle: TextStyle(color: AppColors.textOnPrimary),
           behavior: SnackBarBehavior.floating,
         ),
-        dialogTheme: DialogThemeData(
-          backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: AppColors.divider),
-          ),
-          titleTextStyle: const TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
         progressIndicatorTheme: const ProgressIndicatorThemeData(
           color: AppColors.primary,
-        ),
-        textTheme: const TextTheme(
-          bodyLarge: TextStyle(color: AppColors.textPrimary),
-          bodyMedium: TextStyle(color: AppColors.textPrimary),
-          bodySmall: TextStyle(color: AppColors.textSecondary),
-          titleLarge: TextStyle(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.bold,
-          ),
-          titleMedium: TextStyle(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w600,
-          ),
         ),
       );
 
   static ThemeData get darkTheme => ThemeData(
         useMaterial3: true,
-        brightness: Brightness.dark,
         colorScheme: const ColorScheme.dark(
-          primary: AppColors.textOnPrimary,
-          onPrimary: AppColors.primary,
-          secondary: AppColors.accentLight,
-          surface: Color(0xFF1A1A1A),
+          primary: AppColors.primaryLight,
+          onPrimary: AppColors.textOnPrimary,
+          secondary: AppColors.accent,
+          surface: Color(0xFF1F2937),
           onSurface: AppColors.textOnPrimary,
-          error: AppColors.textOnPrimary,
-          onError: AppColors.primary,
+          error: AppColors.error,
         ),
-        scaffoldBackgroundColor: const Color(0xFF000000),
+        scaffoldBackgroundColor: const Color(0xFF111827),
       );
 }

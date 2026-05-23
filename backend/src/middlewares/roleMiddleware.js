@@ -18,15 +18,26 @@ export function requireFamilyRole (allowedRoles = []) {
         .select('role')
         .eq('family_id', familyId)
         .eq('user_id', userId)
-        .single()
+        .maybeSingle()
 
       if (error) {
         console.error('Role middleware membership error', error)
-        return res.status(403).json({ message: 'Not a member of this family' })
+        return res.status(403).json({
+          message: error.message || 'Could not verify family membership'
+        })
+      }
+
+      if (!membership) {
+        return res.status(403).json({
+          message:
+            'You are not a member of this family. Create a new family vault from Home or ask an admin to invite you.'
+        })
       }
 
       if (allowedRoles.length > 0 && !allowedRoles.includes(membership.role)) {
-        return res.status(403).json({ message: 'Insufficient role for this operation' })
+        return res.status(403).json({
+          message: `Your role (${membership.role}) cannot perform this action. Admin or Adult role is required.`
+        })
       }
 
       req.auth.familyRole = membership.role

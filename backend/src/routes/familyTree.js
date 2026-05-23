@@ -110,9 +110,13 @@ router.post('/:familyId/nodes', requireFamilyRole(['ADMIN', 'ADULT']), async (re
       return res.status(400).json({ message: 'fullName is required' })
     }
 
+    const generation =
+      metadata != null && Object.prototype.hasOwnProperty.call(metadata, 'generation')
+        ? metadata.generation
+        : 1
     const normalizedMetadata = {
       ...(metadata ?? {}),
-      generation: metadata?.generation ?? 1
+      generation
     }
 
     if (id) {
@@ -152,7 +156,10 @@ router.post('/:familyId/nodes', requireFamilyRole(['ADMIN', 'ADULT']), async (re
 
       if (error) {
         console.error('Create node error', error)
-        return res.status(500).json({ message: 'Failed to create node' })
+        return res.status(500).json({
+          message: error.message || 'Failed to create node',
+          code: error.code
+        })
       }
 
       return res.status(201).json(await serializeNode(data))
@@ -199,6 +206,35 @@ router.post('/:familyId/relationships', requireFamilyRole(['ADMIN', 'ADULT']), a
     res.status(500).json({ message: 'Failed to create relationship' })
   }
 })
+
+// Delete a relationship
+router.delete(
+  '/:familyId/relationships/:relationshipId',
+  requireFamilyRole(['ADMIN', 'ADULT']),
+  async (req, res) => {
+    try {
+      const { familyId, relationshipId } = req.params
+
+      const { error } = await supabaseAdmin
+        .from('family_relationships')
+        .delete()
+        .eq('id', relationshipId)
+        .eq('family_id', familyId)
+
+      if (error) {
+        console.error('Delete relationship error', error)
+        return res.status(500).json({
+          message: error.message || 'Failed to delete relationship'
+        })
+      }
+
+      res.status(204).send()
+    } catch (err) {
+      console.error('Delete relationship error', err)
+      res.status(500).json({ message: 'Failed to delete relationship' })
+    }
+  }
+)
 
 // Get tree (nodes + relationships) for a family
 router.get('/:familyId', requireFamilyRole(['ADMIN', 'ADULT', 'JUNIOR']), async (req, res) => {

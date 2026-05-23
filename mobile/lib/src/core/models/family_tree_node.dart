@@ -137,9 +137,9 @@ class FamilyTreeNode {
 
   factory FamilyTreeNode.fromJson(Map<String, dynamic> json) {
     return FamilyTreeNode(
-      id: json['id'] as String,
-      familyId: json['family_id'] as String,
-      fullName: json['full_name'] as String,
+      id: json['id']?.toString() ?? '',
+      familyId: json['family_id']?.toString() ?? '',
+      fullName: json['full_name'] as String? ?? '',
       birthDate: json['birth_date'] != null
           ? DateTime.parse(json['birth_date'] as String)
           : null,
@@ -187,6 +187,30 @@ class FamilyTreeNode {
   }
 
   bool get isDeceased => deathDate != null;
+}
+
+/// How a new member links to someone already in the tree.
+enum MemberLinkType {
+  none,
+  /// Existing member is the parent of the new member.
+  parentOfNew,
+  /// Existing member is the child of the new member.
+  childOfNew,
+  /// Existing member is the spouse of the new member.
+  spouseOfNew;
+
+  String get label {
+    switch (this) {
+      case MemberLinkType.none:
+        return 'No link';
+      case MemberLinkType.parentOfNew:
+        return 'Parent of this person';
+      case MemberLinkType.childOfNew:
+        return 'Child of this person';
+      case MemberLinkType.spouseOfNew:
+        return 'Spouse of this person';
+    }
+  }
 }
 
 enum RelationshipType {
@@ -238,10 +262,10 @@ class FamilyRelationship {
 
   factory FamilyRelationship.fromJson(Map<String, dynamic> json) {
     return FamilyRelationship(
-      id: json['id'] as String,
-      familyId: json['family_id'] as String,
-      fromNodeId: json['from_node_id'] as String,
-      toNodeId: json['to_node_id'] as String,
+      id: json['id']?.toString() ?? '',
+      familyId: json['family_id']?.toString() ?? '',
+      fromNodeId: json['from_node_id']?.toString() ?? '',
+      toNodeId: json['to_node_id']?.toString() ?? '',
       type: RelationshipType.fromString(json['type'] as String),
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
@@ -310,5 +334,58 @@ class FamilyTree {
         .map((r) => r.fromNodeId == nodeId ? r.toNodeId : r.fromNodeId)
         .toList();
     return nodes.where((n) => spouseIds.contains(n.id)).toList();
+  }
+
+  /// Relationships involving [nodeId], with label from that member's perspective.
+  List<MemberRelationshipDisplay> relationshipsInvolving(String nodeId) {
+    final result = <MemberRelationshipDisplay>[];
+    for (final rel in relationships) {
+      if (rel.fromNodeId != nodeId && rel.toNodeId != nodeId) continue;
+
+      final otherId = rel.fromNodeId == nodeId ? rel.toNodeId : rel.fromNodeId;
+      final other = getNodeById(otherId);
+      if (other == null) continue;
+
+      String label;
+      if (rel.type == RelationshipType.spouse) {
+        label = 'Spouse';
+      } else if (rel.type == RelationshipType.parent) {
+        label = rel.fromNodeId == otherId ? 'Parent' : 'Child';
+      } else {
+        label = rel.type.value;
+      }
+
+      result.add(MemberRelationshipDisplay(
+        relationship: rel,
+        otherMember: other,
+        label: label,
+      ));
+    }
+    return result;
+  }
+
+  FamilyTree subsetForNodes(List<FamilyTreeNode> nodeSubset) {
+    final ids = nodeSubset.map((n) => n.id).toSet();
+    final rels = relationships
+        .where((r) => ids.contains(r.fromNodeId) && ids.contains(r.toNodeId))
+        .toList();
+    return FamilyTree(nodes: nodeSubset, relationships: rels);
+  }
+}
+
+class MemberRelationshipDisplay {
+  final FamilyRelationship relationship;
+  final FamilyTreeNode otherMember;
+  final String label;
+
+  const MemberRelationshipDisplay({
+    required this.relationship,
+    required this.otherMember,
+    required this.label,
+  });
+
+  String get subtitle {
+    final year = otherMember.birthDate?.year;
+    return year != null ? '${otherMember.fullName} (b. $year)' : otherMember.fullName;
   }
 }
