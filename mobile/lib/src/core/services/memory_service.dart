@@ -20,8 +20,11 @@ class MemoryService {
     return list.map((json) => Memory.fromJson(json as Map<String, dynamic>)).toList();
   }
 
-  Future<Memory> getMemory(String memoryId) async {
-    final response = await _client.get('/api/memories/$memoryId');
+  Future<Memory> getMemory(String memoryId, {String? familyId}) async {
+    final response = await _client.get(
+      '/api/memories/$memoryId',
+      queryParams: familyId != null ? {'familyId': familyId} : null,
+    );
     return Memory.fromJson(response as Map<String, dynamic>);
   }
 

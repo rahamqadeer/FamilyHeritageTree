@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:family_digital_heritage_vault/src/core/models/memory.dart';
+import 'package:family_digital_heritage_vault/src/core/services/api_client.dart';
 import 'package:family_digital_heritage_vault/src/core/services/service_locator.dart';
 import 'package:family_digital_heritage_vault/src/core/theme/app_theme.dart';
 import 'package:family_digital_heritage_vault/src/features/family/state/family_provider.dart';
@@ -284,7 +285,10 @@ class _MemoryGalleryScreenState extends State<MemoryGalleryScreen> {
       return;
     }
     try {
-      final fresh = await services.memoryService.getMemory(memory.id);
+      final fresh = await services.memoryService.getMemory(
+        memory.id,
+        familyId: memory.familyId,
+      );
       if (!context.mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -293,8 +297,11 @@ class _MemoryGalleryScreenState extends State<MemoryGalleryScreen> {
       );
     } catch (e) {
       if (!context.mounted) return;
+      final message = e is ApiException
+          ? e.message
+          : e.toString().replaceFirst('ApiException: ', '').split(' (status:').first;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open memory: $e')),
+        SnackBar(content: Text('Could not open memory: $message')),
       );
     }
   }

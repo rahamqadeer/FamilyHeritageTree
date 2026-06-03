@@ -427,10 +427,11 @@ class FamilyProvider extends ChangeNotifier {
         );
         break;
       case MemberLinkType.childOfNew:
+        // Existing member is parent; new member is child.
         await services.familyTreeService.createRelationship(
           familyId: familyId,
-          fromNodeId: newNodeId,
-          toNodeId: existingNodeId,
+          fromNodeId: existingNodeId,
+          toNodeId: newNodeId,
           type: RelationshipType.parent,
         );
         break;

@@ -311,18 +311,26 @@ class FamilyTree {
   }
 
   List<FamilyTreeNode> getParentsOf(String nodeId) {
-    final parentIds = relationships
-        .where((r) => r.toNodeId == nodeId && r.type == RelationshipType.parent)
-        .map((r) => r.fromNodeId)
-        .toList();
+    final parentIds = <String>{};
+    for (final r in relationships) {
+      if (r.type == RelationshipType.parent && r.toNodeId == nodeId) {
+        parentIds.add(r.fromNodeId);
+      } else if (r.type == RelationshipType.child && r.fromNodeId == nodeId) {
+        parentIds.add(r.toNodeId);
+      }
+    }
     return nodes.where((n) => parentIds.contains(n.id)).toList();
   }
 
   List<FamilyTreeNode> getChildrenOf(String nodeId) {
-    final childIds = relationships
-        .where((r) => r.fromNodeId == nodeId && r.type == RelationshipType.parent)
-        .map((r) => r.toNodeId)
-        .toList();
+    final childIds = <String>{};
+    for (final r in relationships) {
+      if (r.type == RelationshipType.parent && r.fromNodeId == nodeId) {
+        childIds.add(r.toNodeId);
+      } else if (r.type == RelationshipType.child && r.toNodeId == nodeId) {
+        childIds.add(r.fromNodeId);
+      }
+    }
     return nodes.where((n) => childIds.contains(n.id)).toList();
   }
 
@@ -351,6 +359,8 @@ class FamilyTree {
         label = 'Spouse';
       } else if (rel.type == RelationshipType.parent) {
         label = rel.fromNodeId == otherId ? 'Parent' : 'Child';
+      } else if (rel.type == RelationshipType.child) {
+        label = rel.fromNodeId == nodeId ? 'Child' : 'Parent';
       } else {
         label = rel.type.value;
       }

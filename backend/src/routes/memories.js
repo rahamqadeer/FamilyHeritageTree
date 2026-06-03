@@ -24,6 +24,36 @@ function normalizeMediaType (mediaType) {
 const MEMORY_BUCKET = 'memories'
 const SIGNED_URL_TTL_SEC = 60 * 60
 
+/** Ensures familyId is available for role checks on single-memory routes. */
+async function attachFamilyIdFromMemory (req, res, next) {
+  try {
+    if (req.query.familyId || req.params.familyId || req.body.familyId) {
+      return next()
+    }
+
+    const memoryId = req.params.memoryId
+    if (!memoryId) {
+      return res.status(400).json({ message: 'memoryId is required' })
+    }
+
+    const { data: memory, error } = await supabaseAdmin
+      .from('memories')
+      .select('family_id')
+      .eq('id', memoryId)
+      .single()
+
+    if (error || !memory) {
+      return res.status(404).json({ message: 'Memory not found' })
+    }
+
+    req.query.familyId = memory.family_id
+    next()
+  } catch (err) {
+    console.error('attachFamilyIdFromMemory error', err)
+    res.status(500).json({ message: 'Failed to resolve memory family' })
+  }
+}
+
 /** Object path inside the `memories` bucket (not the public HTTP URL). */
 function extractStorageObjectPath (storagePath) {
   if (!storagePath || typeof storagePath !== 'string') return null
@@ -258,7 +288,12 @@ router.get('/', requireFamilyRole(['ADMIN', 'ADULT', 'JUNIOR']), async (req, res
 })
 
 // Get a single memory with inheritance check
-router.get('/:memoryId', requireFamilyRole(['ADMIN', 'ADULT', 'JUNIOR']), enforceInheritanceRules(), async (req, res) => {
+router.get(
+  '/:memoryId',
+  attachFamilyIdFromMemory,
+  requireFamilyRole(['ADMIN', 'ADULT', 'JUNIOR']),
+  enforceInheritanceRules(),
+  async (req, res) => {
   try {
     const { memoryId } = req.params
 

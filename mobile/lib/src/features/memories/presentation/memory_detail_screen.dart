@@ -2,6 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:family_digital_heritage_vault/src/core/models/memory.dart';
 import 'package:family_digital_heritage_vault/src/core/services/service_locator.dart';
 import 'package:family_digital_heritage_vault/src/core/theme/app_theme.dart';
+import 'package:family_digital_heritage_vault/src/features/family/state/family_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/presentation/inheritance_rule_screen.dart';
 import 'package:family_digital_heritage_vault/src/features/memories/presentation/memory_photo_viewer_screen.dart';
 import 'package:flutter/material.dart';
@@ -30,7 +32,10 @@ class _MemoryDetailScreenState extends State<MemoryDetailScreen> {
   Future<void> _refreshMemory() async {
     setState(() => _loadingMedia = true);
     try {
-      final fresh = await services.memoryService.getMemory(widget.memory.id);
+      final fresh = await services.memoryService.getMemory(
+        widget.memory.id,
+        familyId: widget.memory.familyId,
+      );
       if (mounted) {
         setState(() {
           _memory = fresh;
@@ -260,7 +265,7 @@ class _MemoryDetailScreenState extends State<MemoryDetailScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Inheritance Rules',
+                                'Schedule for family member',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
                                   fontSize: 16,
@@ -269,7 +274,7 @@ class _MemoryDetailScreenState extends State<MemoryDetailScreen> {
                               ),
                               const SizedBox(height: 4),
                               const Text(
-                                'Control when this memory becomes visible',
+                                'Release this memory to a specific person on a date, at an age, or on their birthday',
                                 style: TextStyle(
                                   color: AppColors.textSecondary,
                                   fontSize: 13,
@@ -289,7 +294,7 @@ class _MemoryDetailScreenState extends State<MemoryDetailScreen> {
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: AppColors.primary),
                           ),
-                          child: const Text('Set Rules'),
+                          child: const Text('Schedule'),
                         ),
                       ],
                     ),
@@ -380,6 +385,26 @@ class _MemoryDetailScreenState extends State<MemoryDetailScreen> {
     }
   }
 
+  Future<void> _downloadMemoryPdf(BuildContext context) async {
+    final familyName =
+        context.read<FamilyProvider>().selectedFamily?.name ?? 'Family Vault';
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Preparing PDF…')),
+    );
+    try {
+      await services.pdfExportService.shareMemoryPdf(
+        memory: _memory,
+        familyName: familyName,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not create PDF: $e')),
+        );
+      }
+    }
+  }
+
   void _showOptionsMenu(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -414,9 +439,12 @@ class _MemoryDetailScreenState extends State<MemoryDetailScreen> {
               onTap: () => Navigator.pop(ctx),
             ),
             ListTile(
-              leading: const Icon(Icons.download, color: AppColors.primary),
-              title: const Text('Download'),
-              onTap: () => Navigator.pop(ctx),
+              leading: const Icon(Icons.picture_as_pdf, color: AppColors.primary),
+              title: const Text('Download as PDF'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _downloadMemoryPdf(context);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.edit, color: AppColors.primary),

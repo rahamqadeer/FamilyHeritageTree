@@ -1,4 +1,5 @@
 import 'package:family_digital_heritage_vault/src/core/models/family_tree_node.dart';
+import 'package:family_digital_heritage_vault/src/core/services/service_locator.dart';
 import 'package:family_digital_heritage_vault/src/core/theme/app_theme.dart';
 import 'package:family_digital_heritage_vault/src/features/family/state/family_provider.dart';
 import 'package:family_digital_heritage_vault/src/features/family/presentation/family_setup_screen.dart';
@@ -52,6 +53,27 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
 
   bool get _showGenerationSections =>
       _selectedGeneration == 'All' && _searchController.text.trim().isEmpty;
+
+  Future<void> _downloadTreePdf(BuildContext context, FamilyProvider provider) async {
+    final tree = provider.familyTree;
+    if (tree == null || tree.nodes.isEmpty) return;
+    final familyName = provider.selectedFamily?.name ?? 'Family Tree';
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Preparing family tree PDF…')),
+    );
+    try {
+      await services.pdfExportService.shareFamilyTreePdf(
+        tree: tree,
+        familyName: familyName,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not create PDF: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -184,6 +206,14 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: familyProvider.familyTree == null ||
+                                    familyProvider.familyTree!.nodes.isEmpty
+                                ? null
+                                : () => _downloadTreePdf(context, familyProvider),
+                            icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+                            tooltip: 'Download tree as PDF',
+                          ),
                           IconButton(
                             onPressed: () => showCreateFamilyDialog(context),
                             icon: const Icon(Icons.add_home_work, color: Colors.white),

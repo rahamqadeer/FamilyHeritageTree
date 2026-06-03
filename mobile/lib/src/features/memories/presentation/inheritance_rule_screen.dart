@@ -114,7 +114,7 @@ class _InheritanceRuleScreenState extends State<InheritanceRuleScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text(
-          'Create Inheritance Rule',
+          'Schedule memory for member',
           style: TextStyle(color: AppColors.textPrimary),
         ),
         backgroundColor: AppColors.background,
@@ -201,7 +201,7 @@ class _InheritanceRuleScreenState extends State<InheritanceRuleScreen> {
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
-                      'Inheritance rules let you control when a memory becomes visible to specific family members.',
+                      'Choose who receives this memory and when it unlocks — on a specific date, when they reach an age, or on their birthday each year.',
                       style: TextStyle(
                         fontSize: 13,
                         color: AppColors.textSecondary,
@@ -215,7 +215,7 @@ class _InheritanceRuleScreenState extends State<InheritanceRuleScreen> {
             const SizedBox(height: 24),
             // Beneficiary selection
             const Text(
-              'Select Beneficiary',
+              'Send to family member',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -224,7 +224,7 @@ class _InheritanceRuleScreenState extends State<InheritanceRuleScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Who should receive this memory?',
+              'Who should receive this memory when the rule is satisfied?',
               style: TextStyle(
                 fontSize: 13,
                 color: AppColors.textSecondary,
